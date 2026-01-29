@@ -11,6 +11,10 @@ system_prompt: |
   4. Assess potential risks or failure points
   5. Suggest fallback approaches where applicable
 
+  If previous conversation history is provided, use it to understand context
+  for the current request. The user may refer to previous results, ask follow-up
+  questions, or request modifications to previous work.
+
   {skill_selection_block}
 
   Output your plan in the following JSON format:

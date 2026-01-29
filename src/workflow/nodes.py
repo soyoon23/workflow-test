@@ -1,14 +1,19 @@
 """Workflow nodes for Plan-Act workflow."""
 
 import json
+import logging
 from typing import Any, Optional
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
-from .state import AgentState, PlanStep
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+
+from ..conversation.context import ConversationContextBuilder
 from ..llm.client import LLMClient
 from ..prompts.registry import PromptRegistry
-from ..tools.registry import ToolRegistry
 from ..skills.registry import Skill, SkillRegistry
+from ..tools.registry import ToolRegistry
+from .state import AgentState, PlanStep
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowNodes:
@@ -27,6 +32,7 @@ class WorkflowNodes:
         self.tools = tool_registry
         self.skill_registry = skill_registry
         self.initial_skill = initial_skill
+        self._context_builder = ConversationContextBuilder()
 
     def _get_skill(self, state: AgentState) -> Optional[Skill]:
         """Get active skill from state or initial skill."""
@@ -36,7 +42,7 @@ class WorkflowNodes:
         return self.initial_skill
 
     def _get_prompt(self, role: str, state: AgentState) -> str:
-        """Get prompt for a role, considering active skill."""
+        """Get prompt for a role, considering active skill and conversation context."""
         skill = self._get_skill(state)
 
         # Always use default prompt from registry
@@ -50,6 +56,18 @@ class WorkflowNodes:
         # Append skill context/instructions if available
         if skill and skill.prompt:
             prompt = f"{prompt}\n\n## Skill Context\n{skill.prompt}"
+
+        # Append conversation history context (role-specific)
+        history = state.get("conversation_history", [])
+        if history:
+            conv_context = self._context_builder.build(history, role)
+            if conv_context:
+                prompt = f"{prompt}\n\n{conv_context}"
+                logger.debug(
+                    "Injected conversation context into %s prompt (%d chars)",
+                    role,
+                    len(conv_context),
+                )
 
         return prompt
 
@@ -69,17 +87,14 @@ class WorkflowNodes:
         if not available:
             return ""
 
-        skills_desc = "\n".join([
-            f"- {s.name} ({s.trigger}): {s.description}"
-            for s in available
-        ])
+        skills_desc = "\n".join([f"- {s.name} ({s.trigger}): {s.description}" for s in available])
 
         return (
             "## Skill Selection\n"
             "You also need to select the most appropriate skill for this request.\n"
             "Available skills:\n"
             f"{skills_desc}\n\n"
-            "Analyze the request and set \"selected_skill\" in your output to the best skill name, "
+            'Analyze the request and set "selected_skill" in your output to the best skill name, '
             "or null if no specific skill is needed."
         )
 
@@ -110,13 +125,18 @@ class WorkflowNodes:
             "type": "function",
             "function": {
                 "name": "use_skill",
-                "description": f"Switch to a specialized skill for better task handling. Available skills: {', '.join(skill_names)}",
+                "description": (
+                    "Switch to a specialized skill for better task handling. "
+                    f"Available skills: {', '.join(skill_names)}"
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "skill_name": {
                             "type": "string",
-                            "description": f"Name of the skill to activate. Options: {', '.join(skill_names)}",
+                            "description": (
+                                f"Name of the skill to activate. Options: {', '.join(skill_names)}"
+                            ),
                             "enum": skill_names,
                         },
                         "reason": {
@@ -151,10 +171,12 @@ class WorkflowNodes:
                 )
             )
 
+        logger.debug("plan_node: sending %d messages to LLM", len(messages))
         response = self.llm.chat(messages)
 
         # Parse the plan from response
         plan, selected_skill = self._parse_plan(response.content)
+        logger.info("plan_node: generated %d steps", len(plan))
 
         result = {
             "messages": [response],
@@ -166,6 +188,7 @@ class WorkflowNodes:
         # If plan selected a skill and auto_select is active, update state
         if selected_skill and state.get("auto_select_skill") and not state.get("active_skill_name"):
             result["active_skill_name"] = selected_skill
+            logger.info("plan_node: auto-selected skill=%s", selected_skill)
 
         return result
 
@@ -195,6 +218,12 @@ class WorkflowNodes:
         tools = self._get_tools(state)
 
         # Call LLM with tools
+        logger.debug(
+            "act_node: executing step %d/%d: %s",
+            current_step["step_number"],
+            len(plan),
+            current_step["description"][:80],
+        )
         response = self.llm.chat(messages, tools=tools)
 
         result_messages = [response]
@@ -232,6 +261,7 @@ class WorkflowNodes:
         # Update step with result
         plan[current_index]["status"] = "completed"
         plan[current_index]["result"] = step_result
+        logger.info("act_node: completed step %d", current_step["step_number"])
 
         result = {
             "messages": result_messages,
@@ -263,16 +293,23 @@ class WorkflowNodes:
             ),
         ]
 
+        logger.debug("review_node: sending review request to LLM")
         response = self.llm.chat(messages)
 
         # Parse review result
         review = self._parse_review(response.content)
+        logger.info(
+            "review_node: is_complete=%s, has_key_facts=%d",
+            review.get("is_complete"),
+            len(review.get("key_facts", [])),
+        )
 
         return {
             "messages": [response],
             "is_complete": review.get("is_complete", False),
             "final_answer": review.get("final_answer"),
             "error": review.get("error"),
+            "review_key_facts": review.get("key_facts", []),
         }
 
     def _parse_plan(self, content: str) -> tuple[list[PlanStep], Optional[str]]:
@@ -310,7 +347,7 @@ class WorkflowNodes:
                     )
                 return steps, selected_skill
         except json.JSONDecodeError:
-            pass
+            logger.warning("Failed to parse plan JSON, using fallback")
 
         # Fallback: create a single step from the content
         return [
@@ -332,7 +369,7 @@ class WorkflowNodes:
                 json_str = content[json_start:json_end]
                 return json.loads(json_str)
         except json.JSONDecodeError:
-            pass
+            logger.warning("Failed to parse review JSON, using fallback")
 
         # Fallback: assume complete if we can't parse
         return {
@@ -351,9 +388,7 @@ class WorkflowNodes:
                 "in_progress": "[>>]",
             }.get(step["status"], "[?]")
 
-            lines.append(
-                f"{status_emoji} Step {step['step_number']}: {step['description']}"
-            )
+            lines.append(f"{status_emoji} Step {step['step_number']}: {step['description']}")
             if step.get("result"):
                 lines.append(f"   Result: {step['result'][:200]}")
 

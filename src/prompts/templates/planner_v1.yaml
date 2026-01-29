@@ -10,6 +10,10 @@ system_prompt: |
   3. Identify any tools that might be needed
   4. Output a structured plan
 
+  If previous conversation history is provided, use it to understand context
+  for the current request. The user may refer to previous results, ask follow-up
+  questions, or request modifications to previous work.
+
   {skill_selection_block}
 
   Output your plan in the following JSON format:

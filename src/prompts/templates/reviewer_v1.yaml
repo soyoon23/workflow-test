@@ -22,8 +22,14 @@ system_prompt: |
     "needs_replan": true/false,
     "reason": "Explanation of your decision",
     "final_answer": "Summary of results if complete, null otherwise",
-    "next_action": "continue/replan/complete"
+    "next_action": "continue/replan/complete",
+    "key_facts": ["Important fact 1", "Important fact 2"]
   }
   ```
+
+  The "key_facts" field should contain 1-5 key facts, entities, or conclusions
+  from this conversation turn that would be useful for follow-up questions.
+  Include specific numbers, names, dates, or conclusions that the user might
+  reference in subsequent requests.
 
   Be thorough in your evaluation. Only mark as complete if the user's goal is fully achieved.

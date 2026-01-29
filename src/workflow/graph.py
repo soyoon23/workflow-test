@@ -1,14 +1,18 @@
 """LangGraph workflow definition for Plan-Act workflow."""
 
+import logging
 from typing import Literal, Optional
-from langgraph.graph import StateGraph, END
 
-from .state import AgentState
-from .nodes import WorkflowNodes
+from langgraph.graph import END, StateGraph
+
 from ..llm.client import LLMClient
 from ..prompts.registry import PromptRegistry
-from ..tools.registry import ToolRegistry
 from ..skills.registry import Skill, SkillRegistry
+from ..tools.registry import ToolRegistry
+from .nodes import WorkflowNodes
+from .state import AgentState, ConversationTurn
+
+logger = logging.getLogger(__name__)
 
 
 def should_continue(state: AgentState) -> Literal["act", "review", "plan", "end"]:
@@ -50,6 +54,33 @@ def after_review(state: AgentState) -> Literal["plan", "end"]:
     return "plan"
 
 
+def _build_initial_state(
+    user_request: str,
+    skill: Optional[Skill],
+    auto_select_skill: bool,
+    conversation_history: Optional[list[ConversationTurn]],
+) -> AgentState:
+    """Build the initial AgentState for a workflow invocation.
+
+    Centralizes state initialization to avoid duplication between
+    run_workflow() and stream_workflow().
+    """
+    return {
+        "messages": [],
+        "user_request": user_request,
+        "plan": [],
+        "current_step_index": 0,
+        "is_complete": False,
+        "final_answer": None,
+        "iteration_count": 0,
+        "error": None,
+        "active_skill_name": skill.name if skill else None,
+        "auto_select_skill": auto_select_skill,
+        "conversation_history": conversation_history or [],
+        "review_key_facts": [],
+    }
+
+
 def create_workflow(
     llm_client: LLMClient,
     prompt_registry: PromptRegistry,
@@ -61,9 +92,7 @@ def create_workflow(
     """Create the Plan-Act workflow graph."""
 
     # Initialize nodes
-    nodes = WorkflowNodes(
-        llm_client, prompt_registry, tool_registry, skill_registry, initial_skill
-    )
+    nodes = WorkflowNodes(llm_client, prompt_registry, tool_registry, skill_registry, initial_skill)
 
     # Create graph
     workflow = StateGraph(AgentState)
@@ -119,28 +148,23 @@ def run_workflow(
     skill_registry: SkillRegistry,
     skill: Optional[Skill] = None,
     auto_select_skill: bool = False,
+    conversation_history: Optional[list[ConversationTurn]] = None,
 ) -> dict:
     """Run the workflow with a user request."""
     workflow = create_workflow(
         llm_client, prompt_registry, tool_registry, skill_registry, skill, auto_select_skill
     )
 
-    initial_state: AgentState = {
-        "messages": [],
-        "user_request": user_request,
-        "plan": [],
-        "current_step_index": 0,
-        "is_complete": False,
-        "final_answer": None,
-        "iteration_count": 0,
-        "error": None,
-        "active_skill_name": skill.name if skill else None,
-        "auto_select_skill": auto_select_skill,
-    }
+    initial_state = _build_initial_state(
+        user_request, skill, auto_select_skill, conversation_history
+    )
+    logger.info(
+        "Running workflow: request=%s, history_turns=%d",
+        user_request[:80],
+        len(initial_state["conversation_history"]),
+    )
 
-    # Run the workflow
     final_state = workflow.invoke(initial_state)
-
     return final_state
 
 
@@ -152,25 +176,21 @@ def stream_workflow(
     skill_registry: SkillRegistry,
     skill: Optional[Skill] = None,
     auto_select_skill: bool = False,
+    conversation_history: Optional[list[ConversationTurn]] = None,
 ):
     """Stream the workflow execution."""
     workflow = create_workflow(
         llm_client, prompt_registry, tool_registry, skill_registry, skill, auto_select_skill
     )
 
-    initial_state: AgentState = {
-        "messages": [],
-        "user_request": user_request,
-        "plan": [],
-        "current_step_index": 0,
-        "is_complete": False,
-        "final_answer": None,
-        "iteration_count": 0,
-        "error": None,
-        "active_skill_name": skill.name if skill else None,
-        "auto_select_skill": auto_select_skill,
-    }
+    initial_state = _build_initial_state(
+        user_request, skill, auto_select_skill, conversation_history
+    )
+    logger.info(
+        "Streaming workflow: request=%s, history_turns=%d",
+        user_request[:80],
+        len(initial_state["conversation_history"]),
+    )
 
-    # Stream the workflow
     for event in workflow.stream(initial_state):
         yield event

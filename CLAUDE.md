@@ -25,7 +25,7 @@ python visualize_graph.py
 
 ## Architecture
 
-This is a **Plan-Act-Review** AI workflow built on LangGraph and LiteLLM with a Streamlit UI.
+This is a **Plan-Act-Review** AI workflow built on LangGraph and LiteLLM with a Streamlit chat UI supporting **multi-turn conversations**.
 
 ### Workflow Loop
 
@@ -33,9 +33,22 @@ The core loop is a LangGraph state machine defined in `src/workflow/graph.py`:
 
 1. **Plan** (`plan_node`) — LLM analyzes the user request and produces a structured execution plan (list of `PlanStep`)
 2. **Act** (`act_node`) — Executes one step at a time, optionally calling tools (calculator, web_search) or switching skills mid-execution
-3. **Review** (`review_node`) — LLM evaluates results and decides: complete → END, or needs replan → back to Plan
+3. **Review** (`review_node`) — LLM evaluates results and decides: complete → END, or needs replan → back to Plan. Also extracts `key_facts` for multi-turn context.
 
-Routing between nodes is handled by `should_continue()` and `after_review()` conditional edge functions. The workflow state (`AgentState` TypedDict in `src/workflow/state.py`) carries messages, plan steps, iteration count, and active skill context through the graph.
+Routing between nodes is handled by `should_continue()` and `after_review()` conditional edge functions. The workflow state (`AgentState` TypedDict in `src/workflow/state.py`) carries messages, plan steps, iteration count, active skill context, and conversation history through the graph.
+
+### Multi-Turn Conversation
+
+`src/conversation/` manages cross-turn context with a hybrid sliding window strategy:
+
+- **`ConversationHistoryManager`** (`src/conversation/history.py`) — Tracks `ConversationTurn` summaries across workflow invocations. Applies a sliding window: recent turns retain full plan results, older turns keep only summaries. Configurable via `config.yaml` (`max_history_turns`, `include_plan_detail_turns`).
+- **`ConversationContextBuilder`** (`src/conversation/context.py`) — Builds role-specific context strings from history. Uses `RoleContextFormatter` subclasses for each role:
+  - **Planner**: Sees request, answer, recent plan structure, skill used (most detail)
+  - **Actor**: Sees only `key_facts` (minimal, avoids noise)
+  - **Reviewer**: Sees request, answer, key_facts (medium detail)
+- Custom formatters can be registered via `ConversationContextBuilder.register_formatter()`.
+
+Context is injected into each node's system prompt via `WorkflowNodes._get_prompt()`. The `ConversationHistoryManager` lives in Streamlit session state and persists across reruns.
 
 ### Registry Pattern
 
@@ -54,10 +67,11 @@ Three registries manage extensible components:
 - **Prompt version**: Add a YAML file to `src/prompts/templates/` named `{role}_v{N}.yaml`
 - **Tool**: Add implementation to `src/tools/base.py` and register in `src/tools/registry.py`
 - **Skill**: Add a YAML file to `src/skills/templates/` with name, description, trigger, prompt, and tools fields
+- **Context formatter**: Subclass `RoleContextFormatter` in `src/conversation/context.py` and register via `ConversationContextBuilder.register_formatter()`
 
 ## Configuration
 
-`config.yaml` holds LLM connection settings (base_url, model, api_key), default prompt version, and workflow limits (max_iterations). The Streamlit sidebar also allows runtime overrides.
+`config.yaml` holds LLM connection settings (base_url, model, api_key), default prompt version, workflow limits (max_iterations), and conversation history settings (max_history_turns, include_plan_detail_turns). The Streamlit sidebar also allows runtime overrides.
 
 ## Code Style
 

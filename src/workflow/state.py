@@ -1,12 +1,16 @@
 """Agent state definition for Plan-Act workflow."""
 
-from typing import TypedDict, Annotated, Sequence, Optional
+from typing import Annotated, Optional, Sequence, TypedDict
+
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
+
+from ..conversation.types import ConversationTurn
 
 
 class PlanStep(TypedDict):
     """A single step in the plan."""
+
     step_number: int
     description: str
     status: str  # "pending", "in_progress", "completed", "failed"
@@ -45,3 +49,9 @@ class AgentState(TypedDict):
 
     # Whether to auto-select skill (set by user)
     auto_select_skill: bool
+
+    # Multi-turn conversation history from previous turns
+    conversation_history: list[ConversationTurn]
+
+    # Key facts extracted by reviewer (used to build ConversationTurn)
+    review_key_facts: list[str]
