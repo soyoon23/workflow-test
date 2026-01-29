@@ -1,0 +1,13 @@
+name: research
+description: "웹 검색으로 정보를 조사하고 요약합니다"
+trigger: "/research"
+
+tools:
+  - web_search
+
+prompt: |
+  이 스킬은 웹 검색을 통해 정보를 조사합니다.
+  항상 출처를 명시하고, 신뢰할 수 있는 정보를 제공해야 합니다.
+  검색 결과를 종합하여 명확하고 구조화된 답변을 제공하세요.
+
+enabled: true

@@ -7,6 +7,7 @@ from pathlib import Path
 from src.llm.client import LLMClient
 from src.prompts.registry import PromptRegistry
 from src.tools.registry import ToolRegistry
+from src.skills.registry import SkillRegistry
 from src.workflow.graph import stream_workflow
 
 
@@ -48,7 +49,11 @@ def initialize_components(config: dict):
 
     tool_registry = ToolRegistry()
 
-    return llm_client, prompt_registry, tool_registry
+    skill_registry = SkillRegistry(
+        templates_dir="src/skills/templates"
+    )
+
+    return llm_client, prompt_registry, tool_registry, skill_registry
 
 
 def main():
@@ -66,10 +71,11 @@ def main():
 
     # Initialize components
     if "llm_client" not in st.session_state:
-        llm_client, prompt_registry, tool_registry = initialize_components(config)
+        llm_client, prompt_registry, tool_registry, skill_registry = initialize_components(config)
         st.session_state.llm_client = llm_client
         st.session_state.prompt_registry = prompt_registry
         st.session_state.tool_registry = tool_registry
+        st.session_state.skill_registry = skill_registry
 
     # Sidebar for settings
     with st.sidebar:
@@ -138,6 +144,43 @@ def main():
 
         st.divider()
 
+        # Skills selection
+        st.subheader("🎯 Skills")
+        skill_registry = st.session_state.skill_registry
+        available_skills = skill_registry.get_available()
+
+        # Auto-select option
+        auto_select_skill = st.checkbox(
+            "🤖 Auto-select skill (LLM decides)",
+            value=False,
+            key="auto_select_skill",
+            help="LLM will analyze your request and choose the best skill automatically",
+        )
+
+        # Manual skill selection (disabled when auto-select is on)
+        skill_options = ["None (Default)"] + [
+            f"{s.trigger} - {s.name}" for s in available_skills
+        ]
+        selected_skill_idx = st.selectbox(
+            "Manual Skill Selection",
+            options=range(len(skill_options)),
+            format_func=lambda x: skill_options[x],
+            key="selected_skill",
+            disabled=auto_select_skill,
+        )
+
+        # Show skill info
+        if auto_select_skill:
+            st.info("🤖 LLM will automatically select the best skill for your request")
+        elif selected_skill_idx > 0:
+            selected_skill = available_skills[selected_skill_idx - 1]
+            st.info(f"**{selected_skill.name}**\n\n{selected_skill.description}")
+            st.caption(f"Tools: {', '.join(selected_skill.tools)}")
+        else:
+            st.caption("No skill selected - using default workflow")
+
+        st.divider()
+
         # Tools info
         st.subheader("Available Tools")
         tool_registry = st.session_state.tool_registry
@@ -149,10 +192,16 @@ def main():
 
     with col1:
         st.subheader("📝 User Request")
+
+        # Show available triggers
+        skill_registry = st.session_state.skill_registry
+        triggers = [s.trigger for s in skill_registry.get_available()]
+        st.caption(f"Available triggers: {', '.join(triggers)}")
+
         user_request = st.text_area(
             "Enter your request:",
             height=100,
-            placeholder="예: Calculate the square root of 144 and search for information about it",
+            placeholder="예: /research AI 트렌드 조사해줘\n또는: Calculate the square root of 144",
         )
 
         run_button = st.button("🚀 Run Workflow", type="primary", use_container_width=True)
@@ -170,6 +219,30 @@ def main():
         st.divider()
         st.subheader("🔄 Workflow Execution")
 
+        # Parse skill from input or use selected skill
+        skill_registry = st.session_state.skill_registry
+        detected_skill, parsed_request = skill_registry.parse_input(user_request)
+
+        # Determine skill selection mode
+        use_auto_select = auto_select_skill and not detected_skill
+
+        # Use detected skill from trigger, or selected skill from sidebar, or auto-select
+        if detected_skill:
+            active_skill = detected_skill
+            actual_request = parsed_request
+            st.info(f"🎯 Detected skill: **{active_skill.name}** ({active_skill.trigger})")
+        elif use_auto_select:
+            active_skill = None
+            actual_request = user_request
+            st.info("🤖 Auto-selecting skill based on your request...")
+        elif selected_skill_idx > 0:
+            active_skill = available_skills[selected_skill_idx - 1]
+            actual_request = user_request
+            st.info(f"🎯 Using selected skill: **{active_skill.name}**")
+        else:
+            active_skill = None
+            actual_request = user_request
+
         # Progress display
         progress_container = st.container()
         result_container = st.container()
@@ -186,10 +259,13 @@ def main():
             max_steps = 10
 
             for event in stream_workflow(
-                user_request,
+                actual_request,
                 st.session_state.llm_client,
                 st.session_state.prompt_registry,
                 st.session_state.tool_registry,
+                st.session_state.skill_registry,
+                skill=active_skill,
+                auto_select_skill=use_auto_select,
             ):
                 step_count += 1
                 progress = min(step_count / max_steps, 1.0)
@@ -201,6 +277,10 @@ def main():
 
                     if node_name == "plan":
                         with plan_expander:
+                            # Show skill selection result if auto-selected
+                            if state.get("active_skill_name") and use_auto_select:
+                                st.success(f"🤖 Plan selected skill: **{state['active_skill_name']}**")
+
                             if state.get("plan"):
                                 st.markdown("### Generated Plan")
                                 for step in state["plan"]:
@@ -267,7 +347,7 @@ def main():
     # Footer
     st.divider()
     st.caption(
-        "💡 Tip: Configure LiteLLM proxy with `litellm --model gpt-4 --port 4000`"
+        "💡 Tip: Use skill triggers like `/research`, `/calc`, `/analyze` or select from sidebar"
     )
 
 

@@ -11,10 +11,13 @@ system_prompt: |
   4. Assess potential risks or failure points
   5. Suggest fallback approaches where applicable
 
+  {skill_selection_block}
+
   Output your plan in the following JSON format:
   ```json
   {
     "goal": "Primary goal description",
+    "selected_skill": "skill_name or null",
     "secondary_goals": ["list", "of", "secondary", "goals"],
     "steps": [
       {

@@ -39,3 +39,9 @@ class AgentState(TypedDict):
 
     # Error message if any
     error: Optional[str]
+
+    # Active skill name (selected by router or use_skill tool)
+    active_skill_name: Optional[str]
+
+    # Whether to auto-select skill (set by user)
+    auto_select_skill: bool

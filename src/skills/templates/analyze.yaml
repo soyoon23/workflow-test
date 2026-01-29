@@ -1,0 +1,14 @@
+name: analyze
+description: "주어진 정보를 분석하고 인사이트를 도출합니다"
+trigger: "/analyze"
+
+tools:
+  - calculator
+  - web_search
+
+prompt: |
+  이 스킬은 깊이 있는 분석을 수행합니다.
+  데이터를 여러 관점에서 분석하고, 패턴과 인사이트를 도출하세요.
+  필요시 추가 정보를 검색하고, 계산을 통해 검증하세요.
+
+enabled: true

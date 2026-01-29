@@ -10,10 +10,13 @@ system_prompt: |
   3. Identify any tools that might be needed
   4. Output a structured plan
 
+  {skill_selection_block}
+
   Output your plan in the following JSON format:
   ```json
   {
     "goal": "Brief description of the user's goal",
+    "selected_skill": "skill_name or null",
     "steps": [
       {
         "step_number": 1,

@@ -1,6 +1,6 @@
 """LangGraph workflow definition for Plan-Act workflow."""
 
-from typing import Literal
+from typing import Literal, Optional
 from langgraph.graph import StateGraph, END
 
 from .state import AgentState
@@ -8,6 +8,7 @@ from .nodes import WorkflowNodes
 from ..llm.client import LLMClient
 from ..prompts.registry import PromptRegistry
 from ..tools.registry import ToolRegistry
+from ..skills.registry import Skill, SkillRegistry
 
 
 def should_continue(state: AgentState) -> Literal["act", "review", "plan", "end"]:
@@ -53,11 +54,16 @@ def create_workflow(
     llm_client: LLMClient,
     prompt_registry: PromptRegistry,
     tool_registry: ToolRegistry,
+    skill_registry: SkillRegistry,
+    initial_skill: Optional[Skill] = None,
+    auto_select_skill: bool = False,
 ) -> StateGraph:
     """Create the Plan-Act workflow graph."""
 
     # Initialize nodes
-    nodes = WorkflowNodes(llm_client, prompt_registry, tool_registry)
+    nodes = WorkflowNodes(
+        llm_client, prompt_registry, tool_registry, skill_registry, initial_skill
+    )
 
     # Create graph
     workflow = StateGraph(AgentState)
@@ -67,7 +73,7 @@ def create_workflow(
     workflow.add_node("act", nodes.act_node)
     workflow.add_node("review", nodes.review_node)
 
-    # Set entry point
+    # Always start from plan (plan handles skill selection internally)
     workflow.set_entry_point("plan")
 
     # Add edges
@@ -110,9 +116,14 @@ def run_workflow(
     llm_client: LLMClient,
     prompt_registry: PromptRegistry,
     tool_registry: ToolRegistry,
+    skill_registry: SkillRegistry,
+    skill: Optional[Skill] = None,
+    auto_select_skill: bool = False,
 ) -> dict:
     """Run the workflow with a user request."""
-    workflow = create_workflow(llm_client, prompt_registry, tool_registry)
+    workflow = create_workflow(
+        llm_client, prompt_registry, tool_registry, skill_registry, skill, auto_select_skill
+    )
 
     initial_state: AgentState = {
         "messages": [],
@@ -123,6 +134,8 @@ def run_workflow(
         "final_answer": None,
         "iteration_count": 0,
         "error": None,
+        "active_skill_name": skill.name if skill else None,
+        "auto_select_skill": auto_select_skill,
     }
 
     # Run the workflow
@@ -136,9 +149,14 @@ def stream_workflow(
     llm_client: LLMClient,
     prompt_registry: PromptRegistry,
     tool_registry: ToolRegistry,
+    skill_registry: SkillRegistry,
+    skill: Optional[Skill] = None,
+    auto_select_skill: bool = False,
 ):
     """Stream the workflow execution."""
-    workflow = create_workflow(llm_client, prompt_registry, tool_registry)
+    workflow = create_workflow(
+        llm_client, prompt_registry, tool_registry, skill_registry, skill, auto_select_skill
+    )
 
     initial_state: AgentState = {
         "messages": [],
@@ -149,6 +167,8 @@ def stream_workflow(
         "final_answer": None,
         "iteration_count": 0,
         "error": None,
+        "active_skill_name": skill.name if skill else None,
+        "auto_select_skill": auto_select_skill,
     }
 
     # Stream the workflow
