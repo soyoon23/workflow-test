@@ -1,5 +1,6 @@
 """Streamlit UI for Plan-Act Workflow with multi-turn conversation support."""
 
+import json
 import logging
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from src.prompts.registry import PromptRegistry
 from src.skills.registry import SkillRegistry
 from src.tools.registry import ToolRegistry
 from src.workflow.graph import stream_workflow
+from src.workflow.streaming import StreamCallback, StreamEventType
 
 logger = logging.getLogger(__name__)
 
@@ -224,26 +226,6 @@ def _resolve_skill(
         return None, user_request, False
 
 
-def _format_plan_details(plan: list[dict]) -> str:
-    """Format plan steps into a readable string for the expander."""
-    lines = []
-    for step in plan:
-        status_icon = {
-            "completed": "[OK]",
-            "failed": "[FAIL]",
-            "pending": "[...]",
-            "in_progress": "[>>]",
-        }.get(step["status"], "[?]")
-
-        lines.append(f"{status_icon} Step {step['step_number']}: {step['description']}")
-        if step.get("result"):
-            result_text = step["result"]
-            if len(result_text) > 300:
-                result_text = result_text[:300] + "..."
-            lines.append(f"    Result: {result_text}")
-    return "\n".join(lines)
-
-
 def _run_workflow_streaming(
     actual_request: str,
     active_skill,
@@ -252,9 +234,109 @@ def _run_workflow_streaming(
     """Run the workflow with streaming and return the final state."""
     history_mgr = st.session_state.history_manager
 
-    status_placeholder = st.empty()
-    final_state = None
+    callback = StreamCallback()
 
+    # Mutable UI state shared with the event handler
+    ui = {
+        "plan_container": None,
+        "act_containers": {},
+        "review_container": None,
+        "token_placeholder": None,
+        "token_buf": "",
+    }
+
+    def _handle_event(event):
+        et = event.event_type
+
+        if et == StreamEventType.PHASE_START and event.node_name == "plan":
+            ui["plan_container"] = st.status("계획 수립 중...", expanded=True, state="running")
+
+        elif et == StreamEventType.PLAN_READY:
+            container = ui.get("plan_container")
+            if container:
+                with container:
+                    plan = event.data.get("plan", [])
+                    skill = event.data.get("selected_skill")
+                    if skill:
+                        st.caption(f"Skill: {skill}")
+                    for step in plan:
+                        st.markdown(f"**{step['step_number']}.** {step['description']}")
+                container.update(
+                    label=f"계획 완료 ({len(plan)}단계)",
+                    state="complete",
+                    expanded=False,
+                )
+
+        elif et == StreamEventType.STEP_START:
+            step_num = event.data["step_number"]
+            desc = event.data["description"]
+            container = st.status(
+                f"Step {step_num} 실행 중: {desc}",
+                expanded=True,
+                state="running",
+            )
+            ui["act_containers"][step_num] = container
+            with container:
+                ui["token_placeholder"] = st.empty()
+                ui["token_buf"] = ""
+
+        elif et == StreamEventType.TOKEN:
+            placeholder = ui.get("token_placeholder")
+            if placeholder:
+                ui["token_buf"] += event.data["text"]
+                placeholder.markdown(ui["token_buf"])
+
+        elif et == StreamEventType.TOOL_CALL:
+            step_containers = ui.get("act_containers", {})
+            if step_containers:
+                container = list(step_containers.values())[-1]
+                with container:
+                    st.info(f"도구 호출: **{event.data['tool_name']}**")
+
+        elif et == StreamEventType.TOOL_RESULT:
+            step_containers = ui.get("act_containers", {})
+            if step_containers:
+                container = list(step_containers.values())[-1]
+                with container:
+                    result = event.data["result"]
+                    result_str = json.dumps(result, ensure_ascii=False, indent=2)
+                    if len(result_str) > 500:
+                        result_str = result_str[:500] + "..."
+                    st.code(result_str, language="json")
+                    # Reset token buffer for post-tool response streaming
+                    ui["token_placeholder"] = st.empty()
+                    ui["token_buf"] = ""
+
+        elif et == StreamEventType.STEP_RESULT:
+            step_num = event.data["step_number"]
+            container = ui["act_containers"].get(step_num)
+            if container:
+                container.update(
+                    label=f"Step {step_num} 완료",
+                    state="complete",
+                    expanded=False,
+                )
+                ui["token_placeholder"] = None
+                ui["token_buf"] = ""
+
+        elif et == StreamEventType.PHASE_START and event.node_name == "review":
+            ui["review_container"] = st.status("결과 검토 중...", expanded=False, state="running")
+
+        elif et == StreamEventType.REVIEW_READY:
+            container = ui.get("review_container")
+            if container:
+                is_complete = event.data.get("is_complete", False)
+                if is_complete:
+                    container.update(label="검토 완료", state="complete", expanded=False)
+                else:
+                    container.update(label="재계획 필요", state="error", expanded=False)
+
+        elif et == StreamEventType.ERROR:
+            st.error(f"오류: {event.data.get('message', 'Unknown error')}")
+
+    callback.set_handler(_handle_event)
+
+    final_state: dict = {}
     try:
         for event in stream_workflow(
             actual_request,
@@ -265,31 +347,47 @@ def _run_workflow_streaming(
             skill=active_skill,
             auto_select_skill=use_auto_select,
             conversation_history=history_mgr.history,
+            stream_callback=callback,
         ):
-            for node_name, state in event.items():
-                final_state = state
-
-                if node_name == "plan":
-                    step_count = len(state.get("plan", []))
-                    skill_info = ""
-                    if state.get("active_skill_name") and use_auto_select:
-                        skill_info = f" | Skill: {state['active_skill_name']}"
-                    status_placeholder.markdown(f"*Planning... ({step_count} steps){skill_info}*")
-
-                elif node_name == "act":
-                    idx = state.get("current_step_index", 1)
-                    total = len(state.get("plan", []))
-                    status_placeholder.markdown(f"*Executing step {idx}/{total}...*")
-
-                elif node_name == "review":
-                    status_placeholder.empty()
+            for _, state in event.items():
+                final_state.update(state)
 
     except Exception as e:
         logger.exception("Workflow execution failed")
-        st.error(f"Workflow execution failed: {e}")
+        st.error(f"워크플로우 실행 실패: {e}")
         return None
 
-    return final_state
+    return final_state or None
+
+
+def _render_workflow_details(plan: list[dict]) -> None:
+    """Render plan/act/review results using st.status containers.
+
+    Used both after live streaming and when replaying chat history,
+    so intermediate results persist across Streamlit reruns.
+    """
+    if not plan:
+        return
+
+    # Plan summary
+    with st.status(f"계획 완료 ({len(plan)}단계)", state="complete", expanded=False):
+        for step in plan:
+            st.markdown(f"**{step['step_number']}.** {step['description']}")
+
+    # Each step result
+    for step in plan:
+        status_label = {
+            "completed": f"Step {step['step_number']} 완료",
+            "failed": f"Step {step['step_number']} 실패",
+            "pending": f"Step {step['step_number']} 대기",
+            "in_progress": f"Step {step['step_number']} 진행 중",
+        }.get(step["status"], f"Step {step['step_number']}")
+
+        state = "complete" if step["status"] == "completed" else "error"
+
+        with st.status(status_label, state=state, expanded=False):
+            if step.get("result"):
+                st.markdown(step["result"])
 
 
 def _display_assistant_response(final_state: dict | None) -> None:
@@ -307,23 +405,15 @@ def _display_assistant_response(final_state: dict | None) -> None:
     else:
         answer_text = "Workflow completed without a final answer."
 
-    # Build plan details
-    plan_detail_text = ""
-    if final_state.get("plan"):
-        plan_detail_text = _format_plan_details(final_state["plan"])
-
-    # Render
+    # Render final answer
     st.markdown(answer_text)
-    if plan_detail_text:
-        with st.expander("Plan Details"):
-            st.code(plan_detail_text, language=None)
 
-    # Save to chat messages for redisplay
+    # Save to chat messages for redisplay (include structured plan data)
     st.session_state.chat_messages.append(
         {
             "role": "assistant",
             "content": answer_text,
-            "plan_details": plan_detail_text,
+            "plan": final_state.get("plan", []),
         }
     )
 
@@ -354,10 +444,9 @@ def main():
     # Display conversation history
     for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
+            if msg["role"] == "assistant" and msg.get("plan"):
+                _render_workflow_details(msg["plan"])
             st.markdown(msg["content"])
-            if msg.get("plan_details"):
-                with st.expander("Plan Details"):
-                    st.code(msg["plan_details"], language=None)
 
     # Chat input
     skill_registry = st.session_state.skill_registry

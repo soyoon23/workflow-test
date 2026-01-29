@@ -1,7 +1,8 @@
 """LiteLLM client wrapper for Plan-Act workflow."""
 
 import json
-from typing import Any, Optional
+from typing import Callable, Optional
+
 import litellm
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
@@ -51,11 +52,13 @@ class LLMClient:
                     ]
                 converted.append(message_dict)
             elif isinstance(msg, ToolMessage):
-                converted.append({
-                    "role": "tool",
-                    "tool_call_id": msg.tool_call_id,
-                    "content": msg.content,
-                })
+                converted.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id,
+                        "content": msg.content,
+                    }
+                )
         return converted
 
     def chat(
@@ -90,11 +93,13 @@ class LLMClient:
         tool_calls = []
         if hasattr(message, "tool_calls") and message.tool_calls:
             for tc in message.tool_calls:
-                tool_calls.append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "args": json.loads(tc.function.arguments),
-                })
+                tool_calls.append(
+                    {
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "args": json.loads(tc.function.arguments),
+                    }
+                )
 
         if tool_calls:
             return AIMessage(content=message.content or "", tool_calls=tool_calls)
@@ -130,11 +135,13 @@ class LLMClient:
         tool_calls = []
         if hasattr(message, "tool_calls") and message.tool_calls:
             for tc in message.tool_calls:
-                tool_calls.append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "args": json.loads(tc.function.arguments),
-                })
+                tool_calls.append(
+                    {
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "args": json.loads(tc.function.arguments),
+                    }
+                )
 
         if tool_calls:
             return AIMessage(content=message.content or "", tool_calls=tool_calls)
@@ -165,3 +172,76 @@ class LLMClient:
         for chunk in response:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    def stream_with_callback(
+        self,
+        messages: list,
+        on_token: Callable[[str], None],
+        tools: Optional[list[dict]] = None,
+    ) -> AIMessage:
+        """Stream LLM response, calling on_token for each content chunk.
+
+        Returns the complete AIMessage (with tool_calls if any) after
+        streaming completes. This allows callers to both stream tokens
+        to the UI AND get the full structured response for further processing.
+        """
+        converted_messages = self._convert_messages(messages)
+
+        kwargs = {
+            "model": self.model,
+            "messages": converted_messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "api_base": self.base_url,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        response = litellm.completion(**kwargs)
+
+        full_content = ""
+        tool_calls_accumulator: dict[int, dict] = {}
+
+        for chunk in response:
+            delta = chunk.choices[0].delta
+
+            if delta.content:
+                full_content += delta.content
+                on_token(delta.content)
+
+            if hasattr(delta, "tool_calls") and delta.tool_calls:
+                for tc_delta in delta.tool_calls:
+                    idx = tc_delta.index
+                    if idx not in tool_calls_accumulator:
+                        tool_calls_accumulator[idx] = {
+                            "id": "",
+                            "name": "",
+                            "arguments": "",
+                        }
+                    if tc_delta.id:
+                        tool_calls_accumulator[idx]["id"] = tc_delta.id
+                    if hasattr(tc_delta, "function") and tc_delta.function:
+                        if tc_delta.function.name:
+                            tool_calls_accumulator[idx]["name"] = tc_delta.function.name
+                        if tc_delta.function.arguments:
+                            tool_calls_accumulator[idx]["arguments"] += tc_delta.function.arguments
+
+        tool_calls = []
+        for idx in sorted(tool_calls_accumulator.keys()):
+            tc = tool_calls_accumulator[idx]
+            try:
+                args = json.loads(tc["arguments"]) if tc["arguments"] else {}
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append(
+                {
+                    "id": tc["id"],
+                    "name": tc["name"],
+                    "args": args,
+                }
+            )
+
+        if tool_calls:
+            return AIMessage(content=full_content, tool_calls=tool_calls)
+        return AIMessage(content=full_content)

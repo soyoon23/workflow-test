@@ -12,6 +12,7 @@ from ..prompts.registry import PromptRegistry
 from ..skills.registry import Skill, SkillRegistry
 from ..tools.registry import ToolRegistry
 from .state import AgentState, PlanStep
+from .streaming import StreamCallback
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class WorkflowNodes:
         tool_registry: ToolRegistry,
         skill_registry: SkillRegistry,
         initial_skill: Optional[Skill] = None,
+        stream_callback: Optional[StreamCallback] = None,
     ):
         self.llm = llm_client
         self.prompts = prompt_registry
@@ -33,6 +35,7 @@ class WorkflowNodes:
         self.skill_registry = skill_registry
         self.initial_skill = initial_skill
         self._context_builder = ConversationContextBuilder()
+        self._callback = stream_callback or StreamCallback()
 
     def _get_skill(self, state: AgentState) -> Optional[Skill]:
         """Get active skill from state or initial skill."""
@@ -151,6 +154,8 @@ class WorkflowNodes:
 
     def plan_node(self, state: AgentState) -> dict[str, Any]:
         """Create or update the execution plan."""
+        self._callback.phase_start("plan")
+
         system_prompt = self._get_prompt("planner", state)
         user_request = state["user_request"]
 
@@ -178,6 +183,12 @@ class WorkflowNodes:
         plan, selected_skill = self._parse_plan(response.content)
         logger.info("plan_node: generated %d steps", len(plan))
 
+        self._callback.plan_ready(
+            plan=[{"step_number": s["step_number"], "description": s["description"]} for s in plan],
+            skill=selected_skill,
+        )
+        self._callback.phase_end("plan", step_count=len(plan))
+
         result = {
             "messages": [response],
             "plan": plan,
@@ -203,6 +214,9 @@ class WorkflowNodes:
 
         current_step = plan[current_index]
 
+        self._callback.phase_start("act")
+        self._callback.step_start(current_step["step_number"], current_step["description"])
+
         # Mark step as in progress
         plan[current_index]["status"] = "in_progress"
 
@@ -217,14 +231,21 @@ class WorkflowNodes:
         # Get available tools (filtered by skill if active)
         tools = self._get_tools(state)
 
-        # Call LLM with tools
+        # Call LLM with tools (use streaming if callback available)
         logger.debug(
             "act_node: executing step %d/%d: %s",
             current_step["step_number"],
             len(plan),
             current_step["description"][:80],
         )
-        response = self.llm.chat(messages, tools=tools)
+        if self._callback.is_active:
+            response = self.llm.stream_with_callback(
+                messages,
+                on_token=lambda t: self._callback.token("act", t),
+                tools=tools,
+            )
+        else:
+            response = self.llm.chat(messages, tools=tools)
 
         result_messages = [response]
         step_result = response.content
@@ -233,6 +254,8 @@ class WorkflowNodes:
         new_skill_name = None
         if response.tool_calls:
             for tool_call in response.tool_calls:
+                self._callback.tool_call(tool_call["name"], tool_call.get("args", {}))
+
                 # Check if this is use_skill tool
                 if tool_call["name"] == "use_skill":
                     new_skill_name = tool_call["args"].get("skill_name")
@@ -245,6 +268,8 @@ class WorkflowNodes:
                 else:
                     tool_result = self.tools.execute_tool_call(tool_call)
 
+                self._callback.tool_result(tool_call["name"], tool_result)
+
                 tool_message = ToolMessage(
                     content=json.dumps(tool_result),
                     tool_call_id=tool_call["id"],
@@ -254,7 +279,13 @@ class WorkflowNodes:
 
             # Get final response after tool execution
             messages.extend(result_messages)
-            final_response = self.llm.chat(messages)
+            if self._callback.is_active:
+                final_response = self.llm.stream_with_callback(
+                    messages,
+                    on_token=lambda t: self._callback.token("act", t),
+                )
+            else:
+                final_response = self.llm.chat(messages)
             result_messages.append(final_response)
             step_result = final_response.content
 
@@ -262,6 +293,9 @@ class WorkflowNodes:
         plan[current_index]["status"] = "completed"
         plan[current_index]["result"] = step_result
         logger.info("act_node: completed step %d", current_step["step_number"])
+
+        self._callback.step_result(current_step["step_number"], step_result)
+        self._callback.phase_end("act")
 
         result = {
             "messages": result_messages,
@@ -277,6 +311,8 @@ class WorkflowNodes:
 
     def review_node(self, state: AgentState) -> dict[str, Any]:
         """Review execution results and determine next steps."""
+        self._callback.phase_start("review")
+
         system_prompt = self._get_prompt("reviewer", state)
         user_request = state["user_request"]
         plan = state["plan"]
@@ -303,6 +339,12 @@ class WorkflowNodes:
             review.get("is_complete"),
             len(review.get("key_facts", [])),
         )
+
+        self._callback.review_ready(
+            is_complete=review.get("is_complete", False),
+            final_answer=review.get("final_answer"),
+        )
+        self._callback.phase_end("review")
 
         return {
             "messages": [response],

@@ -11,6 +11,7 @@ from ..skills.registry import Skill, SkillRegistry
 from ..tools.registry import ToolRegistry
 from .nodes import WorkflowNodes
 from .state import AgentState, ConversationTurn
+from .streaming import StreamCallback
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +89,19 @@ def create_workflow(
     skill_registry: SkillRegistry,
     initial_skill: Optional[Skill] = None,
     auto_select_skill: bool = False,
+    stream_callback: Optional[StreamCallback] = None,
 ) -> StateGraph:
     """Create the Plan-Act workflow graph."""
 
     # Initialize nodes
-    nodes = WorkflowNodes(llm_client, prompt_registry, tool_registry, skill_registry, initial_skill)
+    nodes = WorkflowNodes(
+        llm_client,
+        prompt_registry,
+        tool_registry,
+        skill_registry,
+        initial_skill,
+        stream_callback=stream_callback,
+    )
 
     # Create graph
     workflow = StateGraph(AgentState)
@@ -149,10 +158,17 @@ def run_workflow(
     skill: Optional[Skill] = None,
     auto_select_skill: bool = False,
     conversation_history: Optional[list[ConversationTurn]] = None,
+    stream_callback: Optional[StreamCallback] = None,
 ) -> dict:
     """Run the workflow with a user request."""
     workflow = create_workflow(
-        llm_client, prompt_registry, tool_registry, skill_registry, skill, auto_select_skill
+        llm_client,
+        prompt_registry,
+        tool_registry,
+        skill_registry,
+        skill,
+        auto_select_skill,
+        stream_callback=stream_callback,
     )
 
     initial_state = _build_initial_state(
@@ -177,10 +193,17 @@ def stream_workflow(
     skill: Optional[Skill] = None,
     auto_select_skill: bool = False,
     conversation_history: Optional[list[ConversationTurn]] = None,
+    stream_callback: Optional[StreamCallback] = None,
 ):
     """Stream the workflow execution."""
     workflow = create_workflow(
-        llm_client, prompt_registry, tool_registry, skill_registry, skill, auto_select_skill
+        llm_client,
+        prompt_registry,
+        tool_registry,
+        skill_registry,
+        skill,
+        auto_select_skill,
+        stream_callback=stream_callback,
     )
 
     initial_state = _build_initial_state(
