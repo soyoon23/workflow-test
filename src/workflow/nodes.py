@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -362,34 +363,28 @@ class WorkflowNodes:
             selected_skill_name is None if no skill was selected.
         """
         selected_skill = None
-        try:
-            # Try to extract JSON from response
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
+        plan_data = self._extract_json_payload(content)
 
-            if json_start >= 0 and json_end > json_start:
-                json_str = content[json_start:json_end]
-                plan_data = json.loads(json_str)
+        if plan_data:
+            skill_name = plan_data.get("selected_skill")
+            if skill_name and str(skill_name).lower() not in ("none", "null", ""):
+                if self.skill_registry.get(skill_name):
+                    selected_skill = skill_name
 
-                # Extract selected_skill if present
-                skill_name = plan_data.get("selected_skill")
-                if skill_name and str(skill_name).lower() not in ("none", "null", ""):
-                    if self.skill_registry.get(skill_name):
-                        selected_skill = skill_name
-
-                steps = []
-                for step in plan_data.get("steps", []):
-                    steps.append(
-                        PlanStep(
-                            step_number=step.get("step_number", len(steps) + 1),
-                            description=step.get("description", ""),
-                            status="pending",
-                            result=None,
-                        )
+            steps: list[PlanStep] = []
+            for step in plan_data.get("steps", []):
+                steps.append(
+                    PlanStep(
+                        step_number=step.get("step_number", len(steps) + 1),
+                        description=step.get("description", ""),
+                        status="pending",
+                        result=None,
                     )
+                )
+            if steps:
                 return steps, selected_skill
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse plan JSON, using fallback")
+
+        logger.warning("Failed to parse plan JSON, using fallback")
 
         # Fallback: create a single step from the content
         return [
@@ -403,21 +398,44 @@ class WorkflowNodes:
 
     def _parse_review(self, content: str) -> dict[str, Any]:
         """Parse review from LLM response."""
-        try:
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
+        review_data = self._extract_json_payload(content)
+        if review_data is not None:
+            return review_data
 
-            if json_start >= 0 and json_end > json_start:
-                json_str = content[json_start:json_end]
-                return json.loads(json_str)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse review JSON, using fallback")
+        logger.warning("Failed to parse review JSON, using fallback")
 
         # Fallback: assume complete if we can't parse
         return {
             "is_complete": True,
             "final_answer": content,
         }
+
+    def _extract_json_payload(self, content: str) -> Optional[dict[str, Any]]:
+        """Extract a JSON object from LLM output.
+
+        Supports fenced code blocks (```json ... ```), otherwise falls back to
+        searching for the first balanced brace section.
+        """
+
+        # Prefer fenced code block to avoid grabbing unrelated braces
+        fence_match = re.search(r"```(?:json)?\s*(\{.*?\})```", content, re.DOTALL)
+        raw_payload: Optional[str] = None
+        if fence_match:
+            raw_payload = fence_match.group(1)
+        else:
+            json_start = content.find("{")
+            json_end = content.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                raw_payload = content[json_start:json_end]
+
+        if not raw_payload:
+            return None
+
+        try:
+            return json.loads(raw_payload)
+        except json.JSONDecodeError:
+            logger.debug("JSON decoding failed for payload: %s", raw_payload[:200])
+            return None
 
     def _summarize_results(self, plan: list[PlanStep]) -> str:
         """Summarize execution results for replanning."""

@@ -11,12 +11,17 @@ dependencies = [
     "streamlit>=1.35.0",
     "pyyaml>=6.0",
     "pydantic>=2.0",
+    "deepeval>=3.8.3",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4.0",
+]
+eval = [
+    "deepeval>=2.0",
+    "pytest>=8.0",
 ]
 
 [project.scripts]
@@ -35,3 +40,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+markers = [
+    "eval: DeepEval evaluation tests (require LLM)",
+    "unit: Fast unit tests (no LLM needed)",
+]
+testpaths = ["tests"]

@@ -1,0 +1,55 @@
+{
+  "dataset_name": "plan_goldens",
+  "goldens": [
+    {
+      "input": "3의 제곱근을 구해줘",
+      "expected_output": "calculator를 사용하여 sqrt(3)을 계산하는 단일 스텝 플랜",
+      "metadata": {
+        "category": "calculation",
+        "expected_skill": "calculate",
+        "expected_step_count_min": 1,
+        "expected_step_count_max": 2
+      }
+    },
+    {
+      "input": "2의 10제곱을 계산하고 그 결과의 제곱근도 구해줘",
+      "expected_output": "두 개의 계산을 순서대로 수행하는 멀티 스텝 플랜",
+      "metadata": {
+        "category": "multi_step",
+        "expected_skill": "calculate",
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4
+      }
+    },
+    {
+      "input": "/research 파이썬 웹 프레임워크 비교",
+      "expected_output": "web_search로 검색 후 결과를 비교 분석하는 플랜",
+      "metadata": {
+        "category": "research",
+        "expected_skill": "research",
+        "expected_step_count_min": 1,
+        "expected_step_count_max": 4
+      }
+    },
+    {
+      "input": "원의 넓이를 구하는 공식을 설명하고, 반지름 5인 원의 넓이를 계산해줘",
+      "expected_output": "공식 설명과 계산을 포함하는 멀티 스텝 플랜",
+      "metadata": {
+        "category": "multi_step",
+        "expected_skill": "calculate",
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4
+      }
+    },
+    {
+      "input": "안녕하세요, 오늘 날씨가 어떤가요?",
+      "expected_output": "간단한 응답을 위한 플랜",
+      "metadata": {
+        "category": "general",
+        "expected_skill": null,
+        "expected_step_count_min": 1,
+        "expected_step_count_max": 2
+      }
+    }
+  ]
+}

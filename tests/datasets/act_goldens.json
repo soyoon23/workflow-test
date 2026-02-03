@@ -1,0 +1,41 @@
+{
+  "dataset_name": "act_goldens",
+  "goldens": [
+    {
+      "input": "sqrt(3)을 계산하시오",
+      "expected_output": "1.7320508075688772",
+      "metadata": {
+        "step_description": "calculator를 사용하여 sqrt(3)을 계산한다",
+        "expected_tools": ["calculator"],
+        "expected_tool_args": {"expression": "sqrt(3)"}
+      }
+    },
+    {
+      "input": "pow(2, 10)을 계산하시오",
+      "expected_output": "1024",
+      "metadata": {
+        "step_description": "calculator를 사용하여 2의 10제곱을 계산한다",
+        "expected_tools": ["calculator"],
+        "expected_tool_args": {"expression": "pow(2, 10)"}
+      }
+    },
+    {
+      "input": "파이썬 웹 프레임워크에 대해 검색하시오",
+      "expected_output": "파이썬 웹 프레임워크 관련 검색 결과",
+      "metadata": {
+        "step_description": "web_search를 사용하여 파이썬 웹 프레임워크를 검색한다",
+        "expected_tools": ["web_search"],
+        "expected_tool_args": {"query": "파이썬 웹 프레임워크"}
+      }
+    },
+    {
+      "input": "pi * 25를 계산하시오",
+      "expected_output": "78.53981633974483",
+      "metadata": {
+        "step_description": "calculator를 사용하여 pi * 5**2를 계산한다",
+        "expected_tools": ["calculator"],
+        "expected_tool_args": {"expression": "pi * 5**2"}
+      }
+    }
+  ]
+}

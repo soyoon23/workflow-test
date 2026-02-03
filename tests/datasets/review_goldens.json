@@ -1,0 +1,40 @@
+{
+  "dataset_name": "review_goldens",
+  "goldens": [
+    {
+      "input": "3의 제곱근을 구해줘",
+      "expected_output": "3의 제곱근은 약 1.732입니다",
+      "metadata": {
+        "plan_results": [
+          {"step": 1, "description": "sqrt(3) 계산", "result": "sqrt(3) = 1.7320508075688772"}
+        ],
+        "expected_complete": true,
+        "expected_has_key_facts": true
+      }
+    },
+    {
+      "input": "2의 10제곱을 계산하고 그 결과의 제곱근도 구해줘",
+      "expected_output": "2^10 = 1024이고, sqrt(1024) = 32입니다",
+      "metadata": {
+        "plan_results": [
+          {"step": 1, "description": "2^10 계산", "result": "pow(2, 10) = 1024"},
+          {"step": 2, "description": "sqrt(1024) 계산", "result": "sqrt(1024) = 32.0"}
+        ],
+        "expected_complete": true,
+        "expected_has_key_facts": true
+      }
+    },
+    {
+      "input": "/research 파이썬 웹 프레임워크 비교",
+      "expected_output": "Django, Flask, FastAPI 등의 프레임워크를 비교한 종합적인 답변",
+      "metadata": {
+        "plan_results": [
+          {"step": 1, "description": "웹 프레임워크 검색", "result": "검색 결과: Django, Flask, FastAPI 등"},
+          {"step": 2, "description": "결과 분석 및 비교", "result": "각 프레임워크의 장단점 분석"}
+        ],
+        "expected_complete": true,
+        "expected_has_key_facts": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "dataset_name": "e2e_goldens",
+  "goldens": [
+    {
+      "input": "3의 제곱근을 구해줘",
+      "expected_output": "3의 제곱근은 약 1.732입니다",
+      "context": ["calculator 도구를 사용하여 sqrt(3)을 계산할 수 있음"],
+      "metadata": {
+        "category": "calculation",
+        "expected_skill": "calculate",
+        "expected_tools": ["calculator"],
+        "difficulty": "easy"
+      }
+    },
+    {
+      "input": "sin(45도)의 값은?",
+      "expected_output": "sin(45°)는 약 0.7071입니다",
+      "context": ["calculator 도구를 사용하여 삼각함수를 계산할 수 있음"],
+      "metadata": {
+        "category": "calculation",
+        "expected_skill": "calculate",
+        "expected_tools": ["calculator"],
+        "difficulty": "easy"
+      }
+    },
+    {
+      "input": "2의 10제곱을 계산하고 그 결과의 제곱근도 구해줘",
+      "expected_output": "2^10 = 1024이고, sqrt(1024) = 32입니다",
+      "context": ["calculator 도구를 사용하여 pow(2,10)과 sqrt(1024)를 계산"],
+      "metadata": {
+        "category": "multi_step",
+        "expected_skill": "calculate",
+        "expected_tools": ["calculator"],
+        "difficulty": "medium"
+      }
+    },
+    {
+      "input": "/research 최신 인공지능 트렌드",
+      "expected_output": "최신 인공지능 트렌드에 대한 검색 결과를 종합한 답변",
+      "context": ["web_search 도구를 사용하여 정보를 검색"],
+      "metadata": {
+        "category": "research",
+        "expected_skill": "research",
+        "expected_tools": ["web_search"],
+        "difficulty": "medium"
+      }
+    },
+    {
+      "input": "/research 파이썬 웹 프레임워크 비교",
+      "expected_output": "Django, Flask, FastAPI 등 파이썬 웹 프레임워크를 비교한 답변",
+      "context": ["web_search 도구를 사용하여 프레임워크 정보를 검색"],
+      "metadata": {
+        "category": "research",
+        "expected_skill": "research",
+        "expected_tools": ["web_search"],
+        "difficulty": "medium"
+      }
+    },
+    {
+      "input": "원의 넓이를 구하는 공식을 설명하고, 반지름 5인 원의 넓이를 계산해줘",
+      "expected_output": "원의 넓이 = π × r². 반지름 5일 때 넓이는 약 78.54입니다",
+      "context": ["calculator 도구로 pi * 5**2를 계산할 수 있음"],
+      "metadata": {
+        "category": "multi_step",
+        "expected_skill": "calculate",
+        "expected_tools": ["calculator"],
+        "difficulty": "medium"
+      }
+    },
+    {
+      "input": "안녕하세요, 오늘 날씨가 어떤가요?",
+      "expected_output": "날씨 정보 또는 도구 없이 적절한 응답",
+      "context": [],
+      "metadata": {
+        "category": "general",
+        "expected_skill": null,
+        "expected_tools": [],
+        "difficulty": "easy"
+      }
+    },
+    {
+      "input": "log(100)의 값을 구하고, 그 결과에 3을 곱해줘",
+      "expected_output": "log(100) = 2.0이고, 2.0 × 3 = 6.0입니다",
+      "context": ["calculator 도구로 log10(100)과 곱셈을 수행"],
+      "metadata": {
+        "category": "multi_step",
+        "expected_skill": "calculate",
+        "expected_tools": ["calculator"],
+        "difficulty": "medium"
+      }
+    }
+  ]
+}
