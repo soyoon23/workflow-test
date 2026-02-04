@@ -1,7 +1,6 @@
 """Evaluation tests for the Plan node."""
 
 import pytest
-from deepeval import assert_test
 from deepeval.test_case import LLMTestCase
 
 from .conftest import load_goldens
@@ -10,6 +9,7 @@ from .metrics.plan_quality import (
     PlanDecompositionGEval,
     SkillSelectionMetric,
 )
+from .observability_helpers import assert_metrics_with_tracing
 from .traced_workflow import _traced_plan
 
 
@@ -59,7 +59,13 @@ class TestPlanNodeEval:
             actual_output=plan_text,
         )
 
-        assert_test(test_case, [PlanDecompositionGEval])
+        assert_metrics_with_tracing(
+            test_case,
+            [PlanDecompositionGEval],
+            self.tracing_ctx,
+            span_name="plan_decomposition_geval",
+            metadata={"golden_idx": golden_idx},
+        )
 
     @pytest.mark.parametrize("golden_idx", range(5))
     def test_plan_completeness(self, golden_idx):
@@ -79,7 +85,13 @@ class TestPlanNodeEval:
             actual_output=plan_text,
         )
 
-        assert_test(test_case, [PlanCompletenessGEval])
+        assert_metrics_with_tracing(
+            test_case,
+            [PlanCompletenessGEval],
+            self.tracing_ctx,
+            span_name="plan_completeness_geval",
+            metadata={"golden_idx": golden_idx},
+        )
 
     @pytest.mark.parametrize("golden_idx", range(5))
     def test_skill_selection(self, golden_idx):
@@ -108,4 +120,14 @@ class TestPlanNodeEval:
         )
 
         metric = SkillSelectionMetric()
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="skill_selection_metric",
+            metadata={
+                "golden_idx": golden_idx,
+                "expected_skill": expected_skill,
+                "actual_skill": actual_skill,
+            },
+        )

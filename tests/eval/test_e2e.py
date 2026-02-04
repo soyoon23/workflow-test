@@ -1,7 +1,6 @@
 """End-to-end evaluation tests using DeepEval agentic metrics."""
 
 import pytest
-from deepeval import assert_test
 from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.metrics import (
     AnswerRelevancyMetric,
@@ -14,6 +13,7 @@ from deepeval.metrics import (
 from deepeval.test_case import LLMTestCase
 
 from .conftest import load_goldens, run_workflow_for_eval
+from .observability_helpers import assert_metrics_with_tracing
 from .traced_workflow import traced_workflow
 
 
@@ -27,11 +27,12 @@ class TestE2EAgenticMetrics:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup(self, eval_config, eval_model, eval_threshold):
+    def _setup(self, eval_config, eval_model, eval_threshold, request):
         self.config = eval_config
         self.eval_model = eval_model
         self.threshold = eval_threshold
         self.goldens_data = load_goldens("e2e_goldens")
+        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
 
     def test_task_completion(self):
         """Agent should complete the task successfully."""
@@ -114,7 +115,15 @@ class TestE2EAnswerQuality:
         )
 
         metric = AnswerRelevancyMetric(threshold=self.threshold, model=self.eval_model)
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="e2e_answer_relevancy_metric",
+            metadata={
+                "golden_idx": golden_idx,
+            },
+        )
 
     @pytest.mark.parametrize("golden_idx", range(6))
     def test_faithfulness(self, golden_idx):
@@ -134,4 +143,12 @@ class TestE2EAnswerQuality:
         )
 
         metric = FaithfulnessMetric(threshold=self.threshold, model=self.eval_model)
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="e2e_faithfulness_metric",
+            metadata={
+                "golden_idx": golden_idx,
+            },
+        )

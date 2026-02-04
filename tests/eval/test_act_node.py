@@ -1,12 +1,12 @@
 """Evaluation tests for the Act node."""
 
 import pytest
-from deepeval import assert_test
 from deepeval.metrics import ToolCorrectnessMetric
 from deepeval.test_case import LLMTestCase, ToolCall
 
 from .conftest import load_goldens
 from .metrics.step_execution import StepRelevancyGEval
+from .observability_helpers import assert_metrics_with_tracing
 from .traced_workflow import _traced_act
 
 
@@ -75,7 +75,17 @@ class TestActNodeEval:
         )
 
         metric = ToolCorrectnessMetric(threshold=0.5, model=self.eval_model)
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="tool_correctness_metric",
+            metadata={
+                "golden_idx": golden_idx,
+                "expected_tools": expected_tools_names,
+                "actual_tools": [tc.name for tc in actual_tools],
+            },
+        )
 
     @pytest.mark.parametrize("golden_idx", range(4))
     def test_step_relevancy(self, golden_idx):
@@ -96,4 +106,13 @@ class TestActNodeEval:
             actual_output=str(step_result),
         )
 
-        assert_test(test_case, [StepRelevancyGEval])
+        assert_metrics_with_tracing(
+            test_case,
+            [StepRelevancyGEval],
+            self.tracing_ctx,
+            span_name="step_relevancy_geval",
+            metadata={
+                "golden_idx": golden_idx,
+                "step_description": step_desc,
+            },
+        )

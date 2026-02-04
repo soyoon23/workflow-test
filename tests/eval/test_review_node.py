@@ -1,12 +1,12 @@
 """Evaluation tests for the Review node."""
 
 import pytest
-from deepeval import assert_test
 from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
 from deepeval.test_case import LLMTestCase
 
 from .conftest import load_goldens
 from .metrics.review_quality import CompletionDecisionMetric, KeyFactsQualityGEval
+from .observability_helpers import assert_metrics_with_tracing
 from .traced_workflow import _traced_review
 
 
@@ -73,7 +73,15 @@ class TestReviewNodeEval:
         )
 
         metric = AnswerRelevancyMetric(threshold=0.7, model=self.eval_model)
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="answer_relevancy_metric",
+            metadata={
+                "golden_idx": golden_idx,
+            },
+        )
 
     @pytest.mark.parametrize("golden_idx", range(3))
     def test_faithfulness(self, golden_idx):
@@ -95,7 +103,15 @@ class TestReviewNodeEval:
         )
 
         metric = FaithfulnessMetric(threshold=0.7, model=self.eval_model)
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="faithfulness_metric",
+            metadata={
+                "golden_idx": golden_idx,
+            },
+        )
 
     @pytest.mark.parametrize("golden_idx", range(3))
     def test_key_facts_quality(self, golden_idx):
@@ -117,7 +133,16 @@ class TestReviewNodeEval:
             context=plan_context,
         )
 
-        assert_test(test_case, [KeyFactsQualityGEval])
+        assert_metrics_with_tracing(
+            test_case,
+            [KeyFactsQualityGEval],
+            self.tracing_ctx,
+            span_name="key_facts_quality_geval",
+            metadata={
+                "golden_idx": golden_idx,
+                "key_facts_count": len(key_facts),
+            },
+        )
 
     @pytest.mark.parametrize("golden_idx", range(3))
     def test_completion_decision(self, golden_idx):
@@ -142,4 +167,14 @@ class TestReviewNodeEval:
         )
 
         metric = CompletionDecisionMetric()
-        assert_test(test_case, [metric])
+        assert_metrics_with_tracing(
+            test_case,
+            [metric],
+            self.tracing_ctx,
+            span_name="completion_decision_metric",
+            metadata={
+                "golden_idx": golden_idx,
+                "expected_complete": expected_complete,
+                "actual_complete": actual_complete,
+            },
+        )

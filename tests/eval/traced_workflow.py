@@ -14,6 +14,8 @@ from deepeval.test_case import ToolCall
 from deepeval.tracing import observe, update_current_span, update_current_trace
 
 if TYPE_CHECKING:
+    from langchain_core.runnables import RunnableConfig
+
     from src.observability.base import TracingContext
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -37,13 +39,9 @@ def _build_components(config: dict) -> dict:
             temperature=llm_cfg.get("temperature", 0.7),
             max_tokens=llm_cfg.get("max_tokens", 4096),
         ),
-        prompts=PromptRegistry(
-            templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
-        ),
+        prompts=PromptRegistry(templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")),
         tools=ToolRegistry(),
-        skills=SkillRegistry(
-            templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")
-        ),
+        skills=SkillRegistry(templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")),
     )
 
     return {
@@ -135,9 +133,11 @@ def _traced_plan(
     node,
     state: dict,
     tracing_ctx: Optional["TracingContext"] = None,
+    config: Optional["RunnableConfig"] = None,
 ) -> dict:
     """Traced wrapper around PlanNode with observability integration."""
-    result = node(state)
+    runnable_config = config or {}
+    result = node(state, runnable_config)
     plan_steps = result.get("plan", [])
     plan_text = "\n".join(f"{s['step_number']}. {s['description']}" for s in plan_steps)
 
@@ -165,6 +165,7 @@ def _traced_act(
     node,
     state: dict,
     tracing_ctx: Optional["TracingContext"] = None,
+    config: Optional["RunnableConfig"] = None,
 ) -> tuple[dict, list[ToolCall]]:
     """Traced wrapper around ActNode. Returns (result, tools_called)."""
     step_idx = state["current_step_index"]
@@ -181,7 +182,8 @@ def _traced_act(
             },
         )
 
-    result = node(state)
+    runnable_config = config or {}
+    result = node(state, runnable_config)
 
     # Collect tool calls from the messages returned by act_node
     tools_called: list[ToolCall] = []
@@ -217,6 +219,7 @@ def _traced_review(
     node,
     state: dict,
     tracing_ctx: Optional["TracingContext"] = None,
+    config: Optional["RunnableConfig"] = None,
 ) -> dict:
     """Traced wrapper around ReviewNode."""
     span = None
@@ -228,7 +231,8 @@ def _traced_review(
             },
         )
 
-    result = node(state)
+    runnable_config = config or {}
+    result = node(state, runnable_config)
     final_answer = result.get("final_answer", "") or ""
 
     if tracing_ctx and span:
