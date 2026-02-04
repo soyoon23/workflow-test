@@ -60,15 +60,15 @@ def llm_client(config):
 
 
 @pytest.fixture
-def workflow_nodes(llm_client, prompt_registry, tool_registry, skill_registry):
-    """Create WorkflowNodes instance."""
-    from src.workflow.nodes import WorkflowNodes
+def workflow_components(llm_client, prompt_registry, tool_registry, skill_registry):
+    """Create WorkflowComponents instance."""
+    from src.workflow.components import WorkflowComponents
 
-    return WorkflowNodes(
-        llm_client=llm_client,
-        prompt_registry=prompt_registry,
-        tool_registry=tool_registry,
-        skill_registry=skill_registry,
+    return WorkflowComponents(
+        llm=llm_client,
+        prompts=prompt_registry,
+        tools=tool_registry,
+        skills=skill_registry,
     )
 
 

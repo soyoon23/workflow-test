@@ -1,49 +1,39 @@
 """LangGraph workflow definition for Plan-Act workflow."""
 
 import logging
-from typing import Any, List, Literal, Optional
+from typing import Any, Generator, List, Literal, Optional, Union
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langgraph.graph import END, StateGraph
 
-from ..llm.client import LLMClient
-from ..prompts.registry import PromptRegistry
-from ..skills.registry import Skill, SkillRegistry
-from ..tools.registry import ToolRegistry
-from .nodes import WorkflowNodes
+from ..skills.registry import Skill
+from .components import WorkflowComponents
+from .nodes import ActNode, PlanNode, ReviewNode
 from .state import AgentState, ConversationTurn
-from .streaming import StreamCallback
 
 logger = logging.getLogger(__name__)
 
 
 def should_continue(state: AgentState) -> Literal["act", "review", "plan", "end"]:
     """Determine the next step in the workflow."""
-    # Check for errors
     if state.get("error"):
         return "end"
 
-    # Check if complete
     if state.get("is_complete"):
         return "end"
 
-    # Check iteration limit
     if state.get("iteration_count", 0) >= 10:
         return "end"
 
-    # If no plan, go to plan
     if not state.get("plan"):
         return "plan"
 
-    # If we have a plan, check step progress
     plan = state["plan"]
     current_index = state.get("current_step_index", 0)
 
-    # All steps completed -> review
     if current_index >= len(plan):
         return "review"
 
-    # More steps to execute -> act
     return "act"
 
 
@@ -52,7 +42,6 @@ def after_review(state: AgentState) -> Literal["plan", "end"]:
     if state.get("is_complete"):
         return "end"
 
-    # Need to replan
     return "plan"
 
 
@@ -62,11 +51,7 @@ def _build_initial_state(
     auto_select_skill: bool,
     conversation_history: Optional[list[ConversationTurn]],
 ) -> AgentState:
-    """Build the initial AgentState for a workflow invocation.
-
-    Centralizes state initialization to avoid duplication between
-    run_workflow() and stream_workflow().
-    """
+    """Build the initial AgentState for a workflow invocation."""
     return {
         "messages": [],
         "user_request": user_request,
@@ -83,39 +68,24 @@ def _build_initial_state(
     }
 
 
-def create_workflow(
-    llm_client: LLMClient,
-    prompt_registry: PromptRegistry,
-    tool_registry: ToolRegistry,
-    skill_registry: SkillRegistry,
-    initial_skill: Optional[Skill] = None,
-    auto_select_skill: bool = False,
-    stream_callback: Optional[StreamCallback] = None,
-) -> StateGraph:
-    """Create the Plan-Act workflow graph."""
+def create_workflow(components: WorkflowComponents) -> StateGraph:
+    """Create the Plan-Act workflow graph.
 
-    # Initialize nodes
-    nodes = WorkflowNodes(
-        llm_client,
-        prompt_registry,
-        tool_registry,
-        skill_registry,
-        initial_skill,
-        stream_callback=stream_callback,
-    )
+    Args:
+        components: Bundle of shared dependencies for all nodes.
+    """
+    plan = PlanNode(components)
+    act = ActNode(components)
+    review = ReviewNode(components)
 
-    # Create graph
     workflow = StateGraph(AgentState)
 
-    # Add nodes
-    workflow.add_node("plan", nodes.plan_node)
-    workflow.add_node("act", nodes.act_node)
-    workflow.add_node("review", nodes.review_node)
+    workflow.add_node("plan", plan)
+    workflow.add_node("act", act)
+    workflow.add_node("review", review)
 
-    # Always start from plan (plan handles skill selection internally)
     workflow.set_entry_point("plan")
 
-    # Add edges
     workflow.add_conditional_edges(
         "plan",
         should_continue,
@@ -150,95 +120,100 @@ def create_workflow(
     return workflow.compile()
 
 
-def run_workflow(
+def _execute_workflow(
     user_request: str,
-    llm_client: LLMClient,
-    prompt_registry: PromptRegistry,
-    tool_registry: ToolRegistry,
-    skill_registry: SkillRegistry,
-    skill: Optional[Skill] = None,
+    components: WorkflowComponents,
+    *,
     auto_select_skill: bool = False,
     conversation_history: Optional[list[ConversationTurn]] = None,
-    stream_callback: Optional[StreamCallback] = None,
+    callbacks: Optional[List[BaseCallbackHandler]] = None,
+    stream: bool = False,
+) -> Union[dict, Generator]:
+    """Unified workflow execution (invoke or stream).
+
+    Args:
+        user_request: The user's input text.
+        components: Bundle of shared dependencies.
+        auto_select_skill: Whether to let the LLM auto-select a skill.
+        conversation_history: Previous conversation turns for context.
+        callbacks: LangGraph callback handlers (e.g., Langfuse).
+        stream: If True, yield events; if False, return final state.
+    """
+    workflow = create_workflow(components)
+
+    initial_state = _build_initial_state(
+        user_request,
+        components.initial_skill,
+        auto_select_skill,
+        conversation_history,
+    )
+    logger.info(
+        "%s workflow: request=%s, history_turns=%d, callbacks=%s",
+        "Streaming" if stream else "Running",
+        user_request[:80],
+        len(initial_state["conversation_history"]),
+        "enabled" if callbacks else "disabled",
+    )
+
+    config: dict[str, Any] = {}
+    if callbacks:
+        config["callbacks"] = callbacks
+
+    if stream:
+        return workflow.stream(initial_state, config=config if config else None)
+    else:
+        return workflow.invoke(initial_state, config=config if config else None)
+
+
+def run_workflow(
+    user_request: str,
+    components: WorkflowComponents,
+    *,
+    auto_select_skill: bool = False,
+    conversation_history: Optional[list[ConversationTurn]] = None,
     callbacks: Optional[List[BaseCallbackHandler]] = None,
 ) -> dict:
     """Run the workflow with a user request.
 
     Args:
-        callbacks: Optional list of callback handlers (e.g., LangfuseCallbackHandler)
-                   for observability and tracing.
+        user_request: The user's input text.
+        components: Bundle of shared dependencies.
+        auto_select_skill: Whether to let the LLM auto-select a skill.
+        conversation_history: Previous conversation turns for context.
+        callbacks: LangGraph callback handlers (e.g., Langfuse).
     """
-    workflow = create_workflow(
-        llm_client,
-        prompt_registry,
-        tool_registry,
-        skill_registry,
-        skill,
-        auto_select_skill,
-        stream_callback=stream_callback,
+    return _execute_workflow(
+        user_request,
+        components,
+        auto_select_skill=auto_select_skill,
+        conversation_history=conversation_history,
+        callbacks=callbacks,
+        stream=False,
     )
-
-    initial_state = _build_initial_state(
-        user_request, skill, auto_select_skill, conversation_history
-    )
-    logger.info(
-        "Running workflow: request=%s, history_turns=%d, callbacks=%s",
-        user_request[:80],
-        len(initial_state["conversation_history"]),
-        "enabled" if callbacks else "disabled",
-    )
-
-    # Build config for LangGraph with callbacks
-    config: dict[str, Any] = {}
-    if callbacks:
-        config["callbacks"] = callbacks
-
-    final_state = workflow.invoke(initial_state, config=config if config else None)
-    return final_state
 
 
 def stream_workflow(
     user_request: str,
-    llm_client: LLMClient,
-    prompt_registry: PromptRegistry,
-    tool_registry: ToolRegistry,
-    skill_registry: SkillRegistry,
-    skill: Optional[Skill] = None,
+    components: WorkflowComponents,
+    *,
     auto_select_skill: bool = False,
     conversation_history: Optional[list[ConversationTurn]] = None,
-    stream_callback: Optional[StreamCallback] = None,
     callbacks: Optional[List[BaseCallbackHandler]] = None,
 ):
     """Stream the workflow execution.
 
     Args:
-        callbacks: Optional list of callback handlers (e.g., LangfuseCallbackHandler)
-                   for observability and tracing.
+        user_request: The user's input text.
+        components: Bundle of shared dependencies.
+        auto_select_skill: Whether to let the LLM auto-select a skill.
+        conversation_history: Previous conversation turns for context.
+        callbacks: LangGraph callback handlers (e.g., Langfuse).
     """
-    workflow = create_workflow(
-        llm_client,
-        prompt_registry,
-        tool_registry,
-        skill_registry,
-        skill,
-        auto_select_skill,
-        stream_callback=stream_callback,
+    yield from _execute_workflow(
+        user_request,
+        components,
+        auto_select_skill=auto_select_skill,
+        conversation_history=conversation_history,
+        callbacks=callbacks,
+        stream=True,
     )
-
-    initial_state = _build_initial_state(
-        user_request, skill, auto_select_skill, conversation_history
-    )
-    logger.info(
-        "Streaming workflow: request=%s, history_turns=%d, callbacks=%s",
-        user_request[:80],
-        len(initial_state["conversation_history"]),
-        "enabled" if callbacks else "disabled",
-    )
-
-    # Build config for LangGraph with callbacks
-    config: dict[str, Any] = {}
-    if callbacks:
-        config["callbacks"] = callbacks
-
-    for event in workflow.stream(initial_state, config=config if config else None):
-        yield event

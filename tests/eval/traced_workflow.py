@@ -25,35 +25,32 @@ def _build_components(config: dict) -> dict:
     from src.prompts.registry import PromptRegistry
     from src.skills.registry import SkillRegistry
     from src.tools.registry import ToolRegistry
-    from src.workflow.nodes import WorkflowNodes
+    from src.workflow.components import WorkflowComponents
+    from src.workflow.nodes import ActNode, PlanNode, ReviewNode
 
     llm_cfg = config["llm"]
-    llm_client = LLMClient(
-        base_url=llm_cfg["base_url"],
-        model=llm_cfg["model"],
-        api_key=llm_cfg["api_key"],
-        temperature=llm_cfg.get("temperature", 0.7),
-        max_tokens=llm_cfg.get("max_tokens", 4096),
-    )
-    prompt_registry = PromptRegistry(
-        templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
-    )
-    tool_registry = ToolRegistry()
-    skill_registry = SkillRegistry(templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates"))
-
-    nodes = WorkflowNodes(
-        llm_client=llm_client,
-        prompt_registry=prompt_registry,
-        tool_registry=tool_registry,
-        skill_registry=skill_registry,
+    components = WorkflowComponents(
+        llm=LLMClient(
+            base_url=llm_cfg["base_url"],
+            model=llm_cfg["model"],
+            api_key=llm_cfg["api_key"],
+            temperature=llm_cfg.get("temperature", 0.7),
+            max_tokens=llm_cfg.get("max_tokens", 4096),
+        ),
+        prompts=PromptRegistry(
+            templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
+        ),
+        tools=ToolRegistry(),
+        skills=SkillRegistry(
+            templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")
+        ),
     )
 
     return {
-        "llm_client": llm_client,
-        "prompt_registry": prompt_registry,
-        "tool_registry": tool_registry,
-        "skill_registry": skill_registry,
-        "nodes": nodes,
+        "components": components,
+        "plan_node": PlanNode(components),
+        "act_node": ActNode(components),
+        "review_node": ReviewNode(components),
     }
 
 
@@ -94,29 +91,31 @@ def traced_workflow(user_request: str, config: dict) -> str:
     (TaskCompletion, PlanQuality, PlanAdherence, StepEfficiency) can
     evaluate.
     """
-    components = _build_components(config)
-    nodes = components["nodes"]
-    skill_registry = components["skill_registry"]
+    built = _build_components(config)
+    plan_node = built["plan_node"]
+    act_node = built["act_node"]
+    review_node = built["review_node"]
+    components = built["components"]
 
     # Detect skill trigger
-    skill, actual_request = skill_registry.parse_input(user_request)
+    skill, actual_request = components.skills.parse_input(user_request)
     state = _initial_state(actual_request, skill=skill, auto_select=(skill is None))
     all_tools_called: list[ToolCall] = []
     max_iterations = 10
 
     for _ in range(max_iterations):
         # ---- Plan ----
-        plan_result = _traced_plan(nodes, state)
+        plan_result = _traced_plan(plan_node, state)
         state = _merge_state(state, plan_result)
 
         # ---- Act (execute each step) ----
         while state["current_step_index"] < len(state.get("plan", [])):
-            act_result, step_tools = _traced_act(nodes, state)
+            act_result, step_tools = _traced_act(act_node, state)
             all_tools_called.extend(step_tools)
             state = _merge_state(state, act_result)
 
         # ---- Review ----
-        review_result = _traced_review(nodes, state)
+        review_result = _traced_review(review_node, state)
         state = _merge_state(state, review_result)
 
         if state.get("is_complete") or state.get("error"):
@@ -133,16 +132,15 @@ def traced_workflow(user_request: str, config: dict) -> str:
 
 @observe(type="llm", name="plan")
 def _traced_plan(
-    nodes,
+    node,
     state: dict,
     tracing_ctx: Optional["TracingContext"] = None,
 ) -> dict:
-    """Traced wrapper around plan_node with observability integration."""
-    result = nodes.plan_node(state)
+    """Traced wrapper around PlanNode with observability integration."""
+    result = node(state)
     plan_steps = result.get("plan", [])
     plan_text = "\n".join(f"{s['step_number']}. {s['description']}" for s in plan_steps)
 
-    # Observability span (provider-agnostic)
     if tracing_ctx:
         span = tracing_ctx.create_span(
             name="plan_node",
@@ -158,18 +156,17 @@ def _traced_plan(
             },
         )
 
-    # DeepEval span update
     update_current_span(input=state["user_request"], output=plan_text)
     return result
 
 
 @observe(type="tool", name="act")
 def _traced_act(
-    nodes,
+    node,
     state: dict,
     tracing_ctx: Optional["TracingContext"] = None,
 ) -> tuple[dict, list[ToolCall]]:
-    """Traced wrapper around act_node. Returns (result, tools_called)."""
+    """Traced wrapper around ActNode. Returns (result, tools_called)."""
     step_idx = state["current_step_index"]
     step = state["plan"][step_idx]
 
@@ -184,7 +181,7 @@ def _traced_act(
             },
         )
 
-    result = nodes.act_node(state)
+    result = node(state)
 
     # Collect tool calls from the messages returned by act_node
     tools_called: list[ToolCall] = []
@@ -217,11 +214,11 @@ def _traced_act(
 
 @observe(type="llm", name="review")
 def _traced_review(
-    nodes,
+    node,
     state: dict,
     tracing_ctx: Optional["TracingContext"] = None,
 ) -> dict:
-    """Traced wrapper around review_node."""
+    """Traced wrapper around ReviewNode."""
     span = None
     if tracing_ctx:
         span = tracing_ctx.create_span(
@@ -231,7 +228,7 @@ def _traced_review(
             },
         )
 
-    result = nodes.review_node(state)
+    result = node(state)
     final_answer = result.get("final_answer", "") or ""
 
     if tracing_ctx and span:

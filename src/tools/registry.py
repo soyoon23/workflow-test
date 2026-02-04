@@ -1,6 +1,7 @@
 """Tool registry for managing available tools."""
 
 from typing import Any, Callable, Optional
+
 from .base import TOOL_DEFINITIONS, TOOL_FUNCTIONS
 
 

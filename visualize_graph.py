@@ -2,24 +2,24 @@
 
 from src.llm.client import LLMClient
 from src.prompts.registry import PromptRegistry
-from src.tools.registry import ToolRegistry
 from src.skills.registry import SkillRegistry
+from src.tools.registry import ToolRegistry
+from src.workflow.components import WorkflowComponents
 from src.workflow.graph import create_workflow
 
 
 def main():
     # Initialize components
-    llm_client = LLMClient()
-    prompt_registry = PromptRegistry()
-    tool_registry = ToolRegistry()
-    skill_registry = SkillRegistry()
-
-    # Create workflow (with auto_select_skill=True to show router node)
-    print("=== Workflow with Router (auto_select_skill=True) ===")
-    workflow = create_workflow(
-        llm_client, prompt_registry, tool_registry, skill_registry,
-        auto_select_skill=True
+    components = WorkflowComponents(
+        llm=LLMClient(),
+        prompts=PromptRegistry(),
+        tools=ToolRegistry(),
+        skills=SkillRegistry(),
     )
+
+    # Create workflow
+    print("=== Workflow Graph ===")
+    workflow = create_workflow(components)
 
     # Get the graph
     graph = workflow.get_graph()

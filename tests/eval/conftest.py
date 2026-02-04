@@ -144,35 +144,37 @@ def run_workflow_for_eval(
     from src.prompts.registry import PromptRegistry
     from src.skills.registry import SkillRegistry
     from src.tools.registry import ToolRegistry
+    from src.workflow.components import WorkflowComponents
     from src.workflow.graph import run_workflow
 
     llm_cfg = config["llm"]
-    llm_client = LLMClient(
-        base_url=llm_cfg["base_url"],
-        model=llm_cfg["model"],
-        api_key=llm_cfg["api_key"],
-        temperature=llm_cfg.get("temperature", 0.7),
-        max_tokens=llm_cfg.get("max_tokens", 4096),
+    components = WorkflowComponents(
+        llm=LLMClient(
+            base_url=llm_cfg["base_url"],
+            model=llm_cfg["model"],
+            api_key=llm_cfg["api_key"],
+            temperature=llm_cfg.get("temperature", 0.7),
+            max_tokens=llm_cfg.get("max_tokens", 4096),
+        ),
+        prompts=PromptRegistry(
+            templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
+        ),
+        tools=ToolRegistry(),
+        skills=SkillRegistry(
+            templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")
+        ),
     )
-    prompt_registry = PromptRegistry(
-        templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
-    )
-    tool_registry = ToolRegistry()
-    skill_registry = SkillRegistry(templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates"))
 
     # Detect skill trigger
-    skill, actual_request = skill_registry.parse_input(user_request)
+    skill, actual_request = components.skills.parse_input(user_request)
+    components.initial_skill = skill
 
     # Prepare callbacks
     callbacks = [obs_callback] if obs_callback else None
 
     final_state = run_workflow(
         user_request=actual_request,
-        llm_client=llm_client,
-        prompt_registry=prompt_registry,
-        tool_registry=tool_registry,
-        skill_registry=skill_registry,
-        skill=skill,
+        components=components,
         auto_select_skill=(skill is None),
         callbacks=callbacks,
     )

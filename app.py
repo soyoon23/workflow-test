@@ -13,6 +13,7 @@ from src.observability import create_callback
 from src.prompts.registry import PromptRegistry
 from src.skills.registry import SkillRegistry
 from src.tools.registry import ToolRegistry
+from src.workflow.components import WorkflowComponents
 from src.workflow.graph import stream_workflow
 from src.workflow.streaming import StreamCallback, StreamEventType
 
@@ -39,8 +40,8 @@ def load_config() -> dict:
     }
 
 
-def initialize_components(config: dict):
-    """Initialize all components."""
+def initialize_components(config: dict) -> WorkflowComponents:
+    """Initialize all workflow components from config."""
     llm_config = config.get("llm", {})
     llm_client = LLMClient(
         base_url=llm_config.get("base_url", "http://localhost:4000"),
@@ -55,21 +56,18 @@ def initialize_components(config: dict):
         templates_dir=prompts_config.get("templates_dir", "src/prompts/templates")
     )
 
-    tool_registry = ToolRegistry()
-
-    skill_registry = SkillRegistry(templates_dir="src/skills/templates")
-
-    return llm_client, prompt_registry, tool_registry, skill_registry
+    return WorkflowComponents(
+        llm=llm_client,
+        prompts=prompt_registry,
+        tools=ToolRegistry(),
+        skills=SkillRegistry(templates_dir="src/skills/templates"),
+    )
 
 
 def _init_session_state(config: dict) -> None:
     """Initialize all session state variables once."""
-    if "llm_client" not in st.session_state:
-        llm_client, prompt_registry, tool_registry, skill_registry = initialize_components(config)
-        st.session_state.llm_client = llm_client
-        st.session_state.prompt_registry = prompt_registry
-        st.session_state.tool_registry = tool_registry
-        st.session_state.skill_registry = skill_registry
+    if "components" not in st.session_state:
+        st.session_state.components = initialize_components(config)
 
     if "history_manager" not in st.session_state:
         conv_config = config.get("conversation", {})
@@ -120,7 +118,7 @@ def _render_sidebar(config: dict) -> tuple:
         )
 
         if st.button("Apply LLM Settings"):
-            st.session_state.llm_client = LLMClient(
+            st.session_state.components.llm = LLMClient(
                 base_url=base_url,
                 model=model,
                 api_key=api_key,
@@ -132,7 +130,7 @@ def _render_sidebar(config: dict) -> tuple:
 
         # Prompt Settings
         st.subheader("Prompt Versions")
-        prompt_registry = st.session_state.prompt_registry
+        prompt_registry = st.session_state.components.prompts
 
         for role in prompt_registry.get_available_roles():
             versions = prompt_registry.get_available_versions(role)
@@ -156,7 +154,7 @@ def _render_sidebar(config: dict) -> tuple:
 
         # Skills selection
         st.subheader("Skills")
-        skill_registry = st.session_state.skill_registry
+        skill_registry = st.session_state.components.skills
         available_skills = skill_registry.get_available()
 
         auto_select_skill = st.checkbox(
@@ -199,7 +197,7 @@ def _render_sidebar(config: dict) -> tuple:
 
         # Tools info
         st.subheader("Available Tools")
-        tool_registry = st.session_state.tool_registry
+        tool_registry = st.session_state.components.tools
         for tool_name in tool_registry.get_available_tools():
             st.write(f"- {tool_name}")
 
@@ -216,7 +214,7 @@ def _resolve_skill(
 
     Returns: (active_skill, actual_request, use_auto_select)
     """
-    skill_registry = st.session_state.skill_registry
+    skill_registry = st.session_state.components.skills
     detected_skill, parsed_request = skill_registry.parse_input(user_request)
 
     use_auto_select = auto_select_skill and not detected_skill
@@ -357,6 +355,11 @@ def _run_workflow_streaming(
 
     callback.set_handler(_handle_event)
 
+    # Build components with per-request overrides
+    components = st.session_state.components
+    components.initial_skill = active_skill
+    components.callback = callback
+
     # Prepare callbacks
     callbacks = [obs_callback] if obs_callback else None
 
@@ -364,14 +367,9 @@ def _run_workflow_streaming(
     try:
         for event in stream_workflow(
             actual_request,
-            st.session_state.llm_client,
-            st.session_state.prompt_registry,
-            st.session_state.tool_registry,
-            st.session_state.skill_registry,
-            skill=active_skill,
+            components,
             auto_select_skill=use_auto_select,
             conversation_history=history_mgr.history,
-            stream_callback=callback,
             callbacks=callbacks,
         ):
             for _, state in event.items():
@@ -478,7 +476,7 @@ def main():
             st.markdown(msg["content"])
 
     # Chat input
-    skill_registry = st.session_state.skill_registry
+    skill_registry = st.session_state.components.skills
     triggers = [s.trigger for s in skill_registry.get_available()]
     placeholder = "메시지를 입력하세요..."
     if triggers:

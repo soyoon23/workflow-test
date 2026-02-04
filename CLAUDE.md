@@ -27,13 +27,37 @@ python visualize_graph.py
 
 This is a **Plan-Act-Review** AI workflow built on LangGraph and LiteLLM with a Streamlit chat UI supporting **multi-turn conversations**.
 
+### Workflow Node Architecture
+
+Nodes are independent classes satisfying the `BaseNode` protocol (`src/workflow/nodes/base.py`). Each node receives a `WorkflowComponents` dataclass that bundles all shared dependencies (LLM client, registries, callback).
+
+```
+src/workflow/
+├── components.py        # WorkflowComponents dataclass
+├── parsing.py           # JSON/plan/review parsing utilities
+├── tool_executor.py     # Reusable tool execution loop
+├── graph.py             # LangGraph workflow definition & execution
+├── state.py             # AgentState TypedDict
+├── streaming.py         # StreamCallback for UI events
+└── nodes/
+    ├── base.py          # BaseNode Protocol + NodeMixin (shared helpers)
+    ├── plan.py          # PlanNode — creates execution plans
+    ├── act.py           # ActNode — executes plan steps with tools
+    └── review.py        # ReviewNode — evaluates results
+```
+
+**Key types:**
+- **`BaseNode`** (Protocol) — Any callable `(AgentState) -> dict[str, Any]` satisfies this. Matches LangGraph's node interface.
+- **`NodeMixin`** — Provides shared helpers (`_get_prompt`, `_get_skill`, `_get_tools`) used by all built-in nodes.
+- **`WorkflowComponents`** — Bundles `LLMClient`, `PromptRegistry`, `ToolRegistry`, `SkillRegistry`, `StreamCallback`, and `ConversationContextBuilder`.
+
 ### Workflow Loop
 
 The core loop is a LangGraph state machine defined in `src/workflow/graph.py`:
 
-1. **Plan** (`plan_node`) — LLM analyzes the user request and produces a structured execution plan (list of `PlanStep`)
-2. **Act** (`act_node`) — Executes one step at a time, optionally calling tools (calculator, web_search) or switching skills mid-execution
-3. **Review** (`review_node`) — LLM evaluates results and decides: complete → END, or needs replan → back to Plan. Also extracts `key_facts` for multi-turn context.
+1. **Plan** (`PlanNode`) — LLM analyzes the user request and produces a structured execution plan (list of `PlanStep`)
+2. **Act** (`ActNode`) — Executes one step at a time, calling tools via `execute_tool_calls()` from `tool_executor.py`
+3. **Review** (`ReviewNode`) — LLM evaluates results and decides: complete → END, or needs replan → back to Plan. Extracts `key_facts` for multi-turn context.
 
 Routing between nodes is handled by `should_continue()` and `after_review()` conditional edge functions. The workflow state (`AgentState` TypedDict in `src/workflow/state.py`) carries messages, plan steps, iteration count, active skill context, and conversation history through the graph.
 
@@ -48,7 +72,7 @@ Routing between nodes is handled by `should_continue()` and `after_review()` con
   - **Reviewer**: Sees request, answer, key_facts (medium detail)
 - Custom formatters can be registered via `ConversationContextBuilder.register_formatter()`.
 
-Context is injected into each node's system prompt via `WorkflowNodes._get_prompt()`. The `ConversationHistoryManager` lives in Streamlit session state and persists across reruns.
+Context is injected into each node's system prompt via `NodeMixin._get_prompt()`. The `ConversationHistoryManager` lives in Streamlit session state and persists across reruns.
 
 ### Registry Pattern
 
@@ -64,6 +88,7 @@ Three registries manage extensible components:
 
 ### Adding New Components
 
+- **Workflow node**: Implement `__call__(self, state: AgentState) -> dict[str, Any]` (satisfies `BaseNode` protocol). Use `NodeMixin` for shared helpers. Initialize with `WorkflowComponents`.
 - **Prompt version**: Add a YAML file to `src/prompts/templates/` named `{role}_v{N}.yaml`
 - **Tool**: Add implementation to `src/tools/base.py` and register in `src/tools/registry.py`
 - **Skill**: Add a YAML file to `src/skills/templates/` with name, description, trigger, prompt, and tools fields

@@ -1,8 +1,8 @@
 """Prompt registry for easy prompt management and testing."""
 
-import os
 from pathlib import Path
 from typing import Optional
+
 import yaml
 
 

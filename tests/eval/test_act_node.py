@@ -6,8 +6,8 @@ from deepeval.metrics import ToolCorrectnessMetric
 from deepeval.test_case import LLMTestCase, ToolCall
 
 from .conftest import load_goldens
-from .traced_workflow import _traced_act
 from .metrics.step_execution import StepRelevancyGEval
+from .traced_workflow import _traced_act
 
 
 @pytest.mark.eval
@@ -15,8 +15,10 @@ class TestActNodeEval:
     """Evaluate Act node execution quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_nodes, eval_model, request):
-        self.nodes = workflow_nodes
+    def _setup(self, workflow_components, eval_model, request):
+        from src.workflow.nodes import ActNode
+
+        self.act_node = ActNode(workflow_components)
         self.eval_model = eval_model
         self.goldens = load_goldens("act_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
@@ -57,7 +59,7 @@ class TestActNodeEval:
         expected_tools_names = metadata.get("expected_tools", [])
 
         state = self._make_state_with_step(step_desc)
-        result, tool_calls = _traced_act(self.nodes, state, tracing_ctx=self.tracing_ctx)
+        result, tool_calls = _traced_act(self.act_node, state, tracing_ctx=self.tracing_ctx)
 
         # Collect actual tool calls from messages
         actual_tools: list[ToolCall] = [tc for tc in tool_calls if tc.name != "use_skill"]
@@ -86,7 +88,7 @@ class TestActNodeEval:
         step_desc = metadata.get("step_description", golden["input"])
 
         state = self._make_state_with_step(step_desc)
-        result, _ = _traced_act(self.nodes, state, tracing_ctx=self.tracing_ctx)
+        result, _ = _traced_act(self.act_node, state, tracing_ctx=self.tracing_ctx)
 
         step_result = result.get("plan", [{}])[0].get("result", "")
         test_case = LLMTestCase(
