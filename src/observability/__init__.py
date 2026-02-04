@@ -1,10 +1,10 @@
 """Observability integration for workflow tracing and monitoring.
 
 Provides a provider-agnostic factory for creating observability callbacks.
-Supports multiple backends (Langfuse, OpenTelemetry, MLflow, etc.) via
-the ObservabilityProvider interface and ObservabilityRegistry.
+Currently supports Langfuse (v3 SDK) via the ObservabilityProvider interface.
 """
 
+import logging
 from typing import Any, Optional
 
 from .base import ObservabilityProvider, SpanHandle, TracingContext
@@ -16,9 +16,13 @@ __all__ = [
     "TracingContext",
     "SpanHandle",
     "create_callback",
+    "flush",
 ]
 
+logger = logging.getLogger(__name__)
+
 _default_registry = ObservabilityRegistry()
+_active_provider: Optional[ObservabilityProvider] = None
 
 
 def create_callback(
@@ -40,6 +44,8 @@ def create_callback(
         (callback_handler, tracing_context) tuple.
         Both are None if no provider is enabled/available.
     """
+    global _active_provider
+
     provider = _default_registry.resolve_provider(config)
     if provider is None:
         return None, None
@@ -51,5 +57,18 @@ def create_callback(
     if handler is None:
         return None, None
 
+    _active_provider = provider
     context = provider.get_tracing_context()
     return handler, context
+
+
+def flush() -> None:
+    """Flush pending traces and close the active provider's propagation context.
+
+    Safe to call even when no provider is active.
+    """
+    global _active_provider
+
+    if _active_provider is not None:
+        _active_provider.flush()
+        _active_provider = None

@@ -8,6 +8,19 @@ LangGraph 기반 Plan-Act-Review 워크플로우 (멀티턴 대화 지원)
 uv sync
 ```
 
+## 설정
+
+```bash
+# config.yaml 생성 (템플릿 복사 후 수정)
+cp config.yaml.example config.yaml
+
+# 환경변수 설정 (.env 파일 또는 직접 export)
+# Langfuse 사용 시:
+#   LANGFUSE_PUBLIC_KEY=...
+#   LANGFUSE_SECRET_KEY=...
+#   LANGFUSE_HOST=http://localhost:3000
+```
+
 ## 실행
 
 ```bash
@@ -48,18 +61,18 @@ src/
 ├── conversation/              # 멀티턴 대화 관리
 │   ├── history.py             # ConversationHistoryManager
 │   └── context.py             # ConversationContextBuilder
-├── llm/                       # LLM 클라이언트 (LiteLLM 래퍼)
+├── llm/                       # LLM 클라이언트 (LangChain ChatOpenAI via LiteLLM proxy)
 ├── prompts/                   # 프롬프트 레지스트리 + YAML 템플릿
 ├── skills/                    # 스킬 레지스트리 + YAML 템플릿
 ├── tools/                     # 도구 레지스트리 + 구현
-└── observability/             # 관측성 (트레이싱)
+└── observability/             # 관측성 (Langfuse v3 트레이싱)
 ```
 
 ### 워크플로우 노드 구조
 
 모든 워크플로우 노드는 `BaseNode` Protocol을 충족하며, `NodeMixin`을 통해 공통 헬퍼를 공유합니다.
 
-- **`BaseNode` (Protocol)** — `__call__(state: AgentState) -> dict[str, Any]` 시그니처를 정의. 구조적 서브타이핑으로 어떤 클래스든 이 시그니처만 맞으면 노드로 사용 가능.
+- **`BaseNode` (Protocol)** — `__call__(state: AgentState, config: RunnableConfig) -> dict[str, Any]` 시그니처를 정의. LangGraph가 자동으로 `RunnableConfig`(콜백 핸들러 포함)를 전달. 구조적 서브타이핑으로 어떤 클래스든 이 시그니처만 맞으면 노드로 사용 가능.
 - **`NodeMixin`** — 프롬프트 조회, 스킬 조회, 도구 필터링 등 공통 로직을 제공.
 - **`WorkflowComponents`** — 모든 노드가 필요로 하는 의존성(LLM, 프롬프트, 도구, 스킬 등)을 하나의 dataclass로 번들링.
 
@@ -69,9 +82,10 @@ class ReactNode(NodeMixin):
     def __init__(self, components: WorkflowComponents):
         self.components = components
 
-    def __call__(self, state: AgentState) -> dict[str, Any]:
+    def __call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         prompt = self._get_prompt("actor", state)  # NodeMixin 헬퍼 재사용
         tools = self._get_tools(state)              # NodeMixin 헬퍼 재사용
+        response = self.components.llm.chat(messages, config=config)  # config 전달
         ...
 ```
 
@@ -104,7 +118,17 @@ LangGraph StateGraph로 정의된 상태 머신:
 | 워크플로우 노드 | `NodeMixin`을 상속한 새 클래스 작성 후 `graph.py`에 등록 |
 | 컨텍스트 포매터 | `RoleContextFormatter` 서브클래스 작성 후 `ConversationContextBuilder.register_formatter()`로 등록 |
 
+## 관측성 (Observability)
+
+Langfuse v3 SDK를 통한 자동 트레이싱을 지원합니다. LangChain `ChatOpenAI`와 공식 `langfuse.langchain.CallbackHandler`를 사용하여 LLM 호출, 도구 실행 등을 자동 캡처합니다.
+
+- `config.yaml`의 `observability.provider`를 `"langfuse"`로 설정
+- 환경변수 또는 `.env` 파일에 `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` 설정
+
 ## 설정
 
-`config.yaml`에서 LLM 연결, 프롬프트 버전, 워크플로우 제한, 대화 이력 설정을 관리합니다.
+`config.yaml.example`을 복사하여 `config.yaml`을 생성합니다. LLM 연결, 프롬프트 버전, 워크플로우 제한, 대화 이력, 관측성 설정을 관리합니다. `config.yaml`은 `.gitignore`에 포함되어 있으므로 API 키 등 민감 정보를 안전하게 관리할 수 있습니다.
+
+환경변수는 `.env` 파일로도 관리 가능합니다 (`python-dotenv` 지원).
+
 사이드바에서도 런타임 오버라이드가 가능합니다.

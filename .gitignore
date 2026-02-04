@@ -21,6 +21,7 @@ Thumbs.db
 
 # Local
 .env
+config.yaml
 *.log
 
 # Claude

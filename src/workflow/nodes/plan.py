@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from ..components import WorkflowComponents
 from ..parsing import parse_plan
@@ -23,7 +24,7 @@ class PlanNode(NodeMixin):
     def __init__(self, components: WorkflowComponents) -> None:
         self.components = components
 
-    def __call__(self, state: AgentState) -> dict[str, Any]:
+    def __call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         """Create or update the execution plan."""
         c = self.components
         c.callback.phase_start("plan")
@@ -51,7 +52,7 @@ class PlanNode(NodeMixin):
             )
 
         logger.debug("plan_node: sending %d messages to LLM", len(messages))
-        response = c.llm.chat(messages)
+        response = c.llm.chat(messages, config=config)
 
         plan, selected_skill = parse_plan(response.content, c.skills)
         logger.info("plan_node: generated %d steps", len(plan))

@@ -7,6 +7,8 @@ NodeMixin provides shared helper methods for prompt/skill/tool resolution.
 import logging
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from langchain_core.runnables import RunnableConfig
+
 from ...skills.registry import Skill
 from ..components import WorkflowComponents
 from ..state import AgentState
@@ -18,18 +20,19 @@ logger = logging.getLogger(__name__)
 class BaseNode(Protocol):
     """Protocol that all workflow nodes must satisfy.
 
-    Any callable with signature (AgentState) -> dict[str, Any]
-    satisfies this protocol. This matches LangGraph's node interface.
+    Any callable with signature (AgentState, RunnableConfig) -> dict[str, Any]
+    satisfies this protocol. LangGraph automatically passes the RunnableConfig
+    (containing callback handlers, etc.) to each node.
 
     Example:
         class MyCustomNode:
-            def __call__(self, state: AgentState) -> dict[str, Any]:
+            def __call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 ...
 
         node: BaseNode = MyCustomNode()  # type-checks OK
     """
 
-    def __call__(self, state: AgentState) -> dict[str, Any]: ...
+    def __call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]: ...
 
 
 class NodeMixin:

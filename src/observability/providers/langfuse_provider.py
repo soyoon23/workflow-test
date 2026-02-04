@@ -1,26 +1,32 @@
-"""Langfuse observability provider.
+"""Langfuse observability provider (v3 SDK).
 
-Integrates with LangGraph's callback system to automatically trace all node
-executions, LLM calls, and tool invocations to Langfuse.
+Uses the official ``langfuse.langchain.CallbackHandler`` for automatic
+LangGraph tracing.  Custom configuration (trace name, metadata, session/user
+IDs) is applied through ``propagate_attributes`` so that all spans created
+during a workflow run are tagged consistently.
 """
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
-
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
+from typing import Any, Optional
 
 from ..base import ObservabilityProvider, SpanHandle, TracingContext
 
 logger = logging.getLogger(__name__)
 
 
-class LangfuseTracingContext(TracingContext):
-    """TracingContext backed by a Langfuse root span (v3 API)."""
+# ---------------------------------------------------------------------------
+# TracingContext — manual span creation via Langfuse client
+# ---------------------------------------------------------------------------
 
-    def __init__(self, root_span: Any):
-        self._root_span = root_span
+
+class LangfuseTracingContext(TracingContext):
+    """TracingContext backed by the global Langfuse v3 client.
+
+    Spans created here are attached to the currently-active trace (set by
+    ``propagate_attributes``).  If no active trace exists the spans become
+    top-level traces — still visible in the Langfuse UI but not nested.
+    """
 
     def create_span(
         self,
@@ -28,7 +34,9 @@ class LangfuseTracingContext(TracingContext):
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> SpanHandle:
-        span = self._root_span.start_span(name=name, metadata=metadata or {})
+        from langfuse import get_client
+
+        span = get_client().start_span(name=name, metadata=metadata or {})
         return SpanHandle(raw=span)
 
     def end_span(
@@ -52,132 +60,33 @@ class LangfuseTracingContext(TracingContext):
         raw.end()
 
 
-class LangfuseCallbackHandler(BaseCallbackHandler):
-    """Langfuse callback handler for LangGraph workflows (v3 API).
-
-    Automatically captures:
-    - Node executions (plan, act, review)
-    - LLM calls with prompts and responses
-    - Tool invocations
-    - Workflow metadata
-    """
-
-    def __init__(self, trace_name: str = "workflow", metadata: Optional[Dict] = None):
-        from langfuse import Langfuse
-
-        self.langfuse = Langfuse()
-        self._root_span = self.langfuse.start_span(
-            name=trace_name, metadata=metadata or {}
-        )
-        self.current_span = None
-        self.node_spans: Dict[str, Any] = {}
-
-    def on_chain_start(
-        self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
-    ) -> None:
-        run_id = kwargs.get("run_id")
-
-        tags = kwargs.get("tags", [])
-        node_name = next((tag for tag in tags if tag.startswith("seq:")), None)
-        if node_name:
-            node_name = node_name.replace("seq:", "").strip()
-        else:
-            node_name = serialized.get("name", "unknown_node")
-
-        if "plan" in node_name.lower():
-            span_name = "plan_node"
-            meta = {"role": "planner"}
-        elif "act" in node_name.lower():
-            span_name = "act_node"
-            meta = {"role": "actor"}
-        elif "review" in node_name.lower():
-            span_name = "review_node"
-            meta = {"role": "reviewer"}
-        else:
-            span_name = node_name
-            meta = {}
-
-        span = self._root_span.start_span(
-            name=span_name, metadata=meta, input=inputs
-        )
-        self.node_spans[str(run_id)] = {"span": span}
-
-    def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
-        run_id = kwargs.get("run_id")
-        span_info = self.node_spans.get(str(run_id))
-
-        if span_info:
-            span_info["span"].update(output=outputs)
-            span_info["span"].end()
-            del self.node_spans[str(run_id)]
-
-    def on_llm_start(
-        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
-    ) -> None:
-        run_id = kwargs.get("run_id")
-
-        generation = self._root_span.start_generation(
-            name="llm_call",
-            model=serialized.get("name", "unknown"),
-            input=prompts,
-        )
-        self.node_spans[str(run_id)] = {"type": "llm", "generation": generation}
-
-    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        run_id = kwargs.get("run_id")
-        llm_info = self.node_spans.get(str(run_id))
-
-        if llm_info and llm_info.get("type") == "llm":
-            outputs = []
-            for generations in response.generations:
-                for gen in generations:
-                    outputs.append(gen.text)
-
-            llm_info["generation"].update(
-                output=outputs[0] if outputs else "",
-                metadata={
-                    "token_usage": response.llm_output.get("token_usage")
-                    if response.llm_output
-                    else None
-                },
-            )
-            llm_info["generation"].end()
-            del self.node_spans[str(run_id)]
-
-    def on_tool_start(
-        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
-    ) -> None:
-        run_id = kwargs.get("run_id")
-
-        span = self._root_span.start_span(
-            name=f"tool_{serialized.get('name', 'unknown')}",
-            metadata={"tool_type": "tool"},
-            input=input_str,
-        )
-        self.node_spans[str(run_id)] = {"type": "tool", "span": span}
-
-    def on_tool_end(self, output: str, **kwargs: Any) -> None:
-        run_id = kwargs.get("run_id")
-        tool_info = self.node_spans.get(str(run_id))
-
-        if tool_info and tool_info.get("type") == "tool":
-            tool_info["span"].update(output=output)
-            tool_info["span"].end()
-            del self.node_spans[str(run_id)]
-
-    def flush(self):
-        if self._root_span:
-            self._root_span.end()
-            self._root_span = None
-        self.langfuse.flush()
+# ---------------------------------------------------------------------------
+# Provider
+# ---------------------------------------------------------------------------
 
 
 class LangfuseProvider(ObservabilityProvider):
-    """Langfuse observability provider."""
+    """Langfuse observability provider using the official v3 CallbackHandler.
+
+    Lifecycle (per workflow run)::
+
+        provider.configure(config)          # set env-var credentials
+        handler = provider.create_callback(  # opens propagate_attributes ctx
+            trace_name="workflow_20240101",
+            metadata={...},
+            session_id="session-abc",
+            user_id="user-xyz",
+            tags=["eval"],
+        )
+        stream_workflow(..., callbacks=[handler])
+        provider.flush()                    # flush + close propagate ctx
+    """
 
     def __init__(self):
-        self._current_handler: Optional[LangfuseCallbackHandler] = None
-        self._current_context: Optional[LangfuseTracingContext] = None
+        self._current_handler: Any = None
+        self._attr_context: Any = None
+
+    # -- identity / availability -------------------------------------------
 
     @property
     def name(self) -> str:
@@ -191,8 +100,18 @@ class LangfuseProvider(ObservabilityProvider):
         except ImportError:
             return False
 
+    # -- configuration -----------------------------------------------------
+
     def configure(self, config: dict) -> bool:
-        """Set environment variables from config. Returns True if credentials found."""
+        """Resolve Langfuse credentials from *config* / env-vars.
+
+        Looks up keys from ``config['langfuse']`` and
+        ``config['observability']['langfuse']`` (the latter wins on conflict).
+        Environment variables (``LANGFUSE_PUBLIC_KEY``, ``LANGFUSE_SECRET_KEY``,
+        ``LANGFUSE_HOST``) always take precedence.
+
+        Returns ``True`` when valid credentials were found.
+        """
         langfuse_cfg = config.get("langfuse", {})
         obs_cfg = config.get("observability", {})
         merged = {**langfuse_cfg, **obs_cfg.get("langfuse", {})}
@@ -202,7 +121,7 @@ class LangfuseProvider(ObservabilityProvider):
         host = os.getenv("LANGFUSE_HOST") or merged.get("host", "http://localhost:3000")
 
         if not public_key or not secret_key:
-            logger.warning("Langfuse credentials not found, skipping tracing")
+            logger.warning("Langfuse credentials not found — tracing disabled")
             return False
 
         os.environ["LANGFUSE_PUBLIC_KEY"] = public_key
@@ -210,22 +129,86 @@ class LangfuseProvider(ObservabilityProvider):
         os.environ["LANGFUSE_HOST"] = host
         return True
 
+    # -- callback creation -------------------------------------------------
+
     def create_callback(
         self,
         trace_name: str = "workflow",
         metadata: Optional[dict[str, Any]] = None,
-    ) -> Optional[LangfuseCallbackHandler]:
+        *,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+    ) -> Any:
+        """Create the official v3 ``CallbackHandler``.
+
+        Custom attributes (trace name, metadata, session/user IDs, tags) are
+        propagated via ``langfuse.propagate_attributes`` so that **every** span
+        the handler creates is automatically tagged.
+
+        The propagation context is kept open until :meth:`flush` is called.
+        """
         if not self.is_available():
             return None
 
-        handler = LangfuseCallbackHandler(trace_name=trace_name, metadata=metadata)
+        from langfuse import propagate_attributes
+        from langfuse.langchain import CallbackHandler
+
+        # ---- propagate custom attributes to all child spans ----
+        propagate_kwargs: dict[str, Any] = {"trace_name": trace_name}
+        if metadata:
+            propagate_kwargs["metadata"] = metadata
+        if session_id:
+            propagate_kwargs["session_id"] = session_id
+        if user_id:
+            propagate_kwargs["user_id"] = user_id
+        if tags:
+            propagate_kwargs["tags"] = tags
+
+        self._attr_context = propagate_attributes(**propagate_kwargs)
+        self._attr_context.__enter__()
+
+        # ---- create the official handler ----
+        handler = CallbackHandler()
         self._current_handler = handler
-        self._current_context = LangfuseTracingContext(handler._root_span)
+
+        logger.info(
+            "Langfuse tracing started — trace_name=%s, session=%s, user=%s",
+            trace_name,
+            session_id,
+            user_id,
+        )
         return handler
 
+    # -- tracing context (manual spans) ------------------------------------
+
     def get_tracing_context(self) -> Optional[LangfuseTracingContext]:
-        return self._current_context
+        """Return a ``TracingContext`` for manual span creation.
+
+        Must be called *after* :meth:`create_callback`.
+        """
+        if self._current_handler is not None:
+            return LangfuseTracingContext()
+        return None
+
+    # -- flush / teardown --------------------------------------------------
 
     def flush(self) -> None:
-        if self._current_handler:
-            self._current_handler.flush()
+        """Flush pending traces and close the propagation context.
+
+        Safe to call multiple times or when no handler is active.
+        """
+        try:
+            from langfuse import get_client
+
+            get_client().flush()
+        except Exception:
+            logger.debug("Langfuse flush failed", exc_info=True)
+        finally:
+            if self._attr_context:
+                try:
+                    self._attr_context.__exit__(None, None, None)
+                except Exception:
+                    pass
+                self._attr_context = None
+            self._current_handler = None

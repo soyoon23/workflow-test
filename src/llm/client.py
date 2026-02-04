@@ -1,14 +1,21 @@
-"""LiteLLM client wrapper for Plan-Act workflow."""
+"""LangChain ChatOpenAI wrapper for Plan-Act workflow.
 
-import json
+Uses ChatOpenAI pointed at the LiteLLM proxy so that every LLM call is
+a proper LangChain Runnable invocation.  When LangGraph passes a
+RunnableConfig (containing Langfuse callback handlers) through to these
+methods, the callbacks automatically capture full input/output — including
+system prompts and user prompts.
+"""
+
 from typing import Callable, Optional
 
-import litellm
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_openai import ChatOpenAI
 
 
 class LLMClient:
-    """Client for LLM calls via LiteLLM proxy."""
+    """Client for LLM calls via LangChain ChatOpenAI + LiteLLM proxy."""
 
     def __init__(
         self,
@@ -18,166 +25,74 @@ class LLMClient:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ):
-        self.base_url = base_url
-        self.model = model
-        self.api_key = api_key
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        # ChatOpenAI expects an OpenAI-compatible /v1 base URL
+        normalized = base_url.rstrip("/")
+        if not normalized.endswith("/v1"):
+            normalized += "/v1"
 
-        # Configure LiteLLM to use proxy
-        litellm.api_base = base_url
-        litellm.api_key = api_key
-
-    def _convert_messages(self, messages: list) -> list[dict]:
-        """Convert LangChain messages to OpenAI format."""
-        converted = []
-        for msg in messages:
-            if isinstance(msg, SystemMessage):
-                converted.append({"role": "system", "content": msg.content})
-            elif isinstance(msg, HumanMessage):
-                converted.append({"role": "user", "content": msg.content})
-            elif isinstance(msg, AIMessage):
-                message_dict = {"role": "assistant", "content": msg.content}
-                if msg.tool_calls:
-                    message_dict["tool_calls"] = [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["name"],
-                                "arguments": json.dumps(tc["args"]),
-                            },
-                        }
-                        for tc in msg.tool_calls
-                    ]
-                converted.append(message_dict)
-            elif isinstance(msg, ToolMessage):
-                converted.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": msg.tool_call_id,
-                        "content": msg.content,
-                    }
-                )
-        return converted
+        self._model = ChatOpenAI(
+            base_url=normalized,
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
     def chat(
         self,
         messages: list,
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[str] = None,
+        config: Optional[RunnableConfig] = None,
     ) -> AIMessage:
         """Send chat completion request."""
-        converted_messages = self._convert_messages(messages)
-
-        kwargs = {
-            "model": self.model,
-            "messages": converted_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "api_base": self.base_url,
-        }
-
+        llm = self._model
         if tools:
-            kwargs["tools"] = tools
+            bind_kwargs: dict = {"tools": tools}
             if tool_choice:
-                kwargs["tool_choice"] = tool_choice
+                bind_kwargs["tool_choice"] = tool_choice
+            llm = llm.bind(**bind_kwargs)
 
-        response = litellm.completion(**kwargs)
-
-        # Extract response
-        choice = response.choices[0]
-        message = choice.message
-
-        # Build AIMessage
-        tool_calls = []
-        if hasattr(message, "tool_calls") and message.tool_calls:
-            for tc in message.tool_calls:
-                tool_calls.append(
-                    {
-                        "id": tc.id,
-                        "name": tc.function.name,
-                        "args": json.loads(tc.function.arguments),
-                    }
-                )
-
-        if tool_calls:
-            return AIMessage(content=message.content or "", tool_calls=tool_calls)
-        return AIMessage(content=message.content or "")
+        return llm.invoke(messages, config=config)
 
     async def achat(
         self,
         messages: list,
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[str] = None,
+        config: Optional[RunnableConfig] = None,
     ) -> AIMessage:
         """Async chat completion request."""
-        converted_messages = self._convert_messages(messages)
-
-        kwargs = {
-            "model": self.model,
-            "messages": converted_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "api_base": self.base_url,
-        }
-
+        llm = self._model
         if tools:
-            kwargs["tools"] = tools
+            bind_kwargs: dict = {"tools": tools}
             if tool_choice:
-                kwargs["tool_choice"] = tool_choice
+                bind_kwargs["tool_choice"] = tool_choice
+            llm = llm.bind(**bind_kwargs)
 
-        response = await litellm.acompletion(**kwargs)
-
-        choice = response.choices[0]
-        message = choice.message
-
-        tool_calls = []
-        if hasattr(message, "tool_calls") and message.tool_calls:
-            for tc in message.tool_calls:
-                tool_calls.append(
-                    {
-                        "id": tc.id,
-                        "name": tc.function.name,
-                        "args": json.loads(tc.function.arguments),
-                    }
-                )
-
-        if tool_calls:
-            return AIMessage(content=message.content or "", tool_calls=tool_calls)
-        return AIMessage(content=message.content or "")
+        return await llm.ainvoke(messages, config=config)
 
     def stream(
         self,
         messages: list,
         tools: Optional[list[dict]] = None,
+        config: Optional[RunnableConfig] = None,
     ):
         """Stream chat completion response."""
-        converted_messages = self._convert_messages(messages)
-
-        kwargs = {
-            "model": self.model,
-            "messages": converted_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "api_base": self.base_url,
-            "stream": True,
-        }
-
+        llm = self._model
         if tools:
-            kwargs["tools"] = tools
+            llm = llm.bind(tools=tools)
 
-        response = litellm.completion(**kwargs)
-
-        for chunk in response:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        for chunk in llm.stream(messages, config=config):
+            if chunk.content:
+                yield chunk.content
 
     def stream_with_callback(
         self,
         messages: list,
         on_token: Callable[[str], None],
         tools: Optional[list[dict]] = None,
+        config: Optional[RunnableConfig] = None,
     ) -> AIMessage:
         """Stream LLM response, calling on_token for each content chunk.
 
@@ -185,63 +100,20 @@ class LLMClient:
         streaming completes. This allows callers to both stream tokens
         to the UI AND get the full structured response for further processing.
         """
-        converted_messages = self._convert_messages(messages)
-
-        kwargs = {
-            "model": self.model,
-            "messages": converted_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "api_base": self.base_url,
-            "stream": True,
-        }
+        llm = self._model
         if tools:
-            kwargs["tools"] = tools
+            llm = llm.bind(tools=tools)
 
-        response = litellm.completion(**kwargs)
+        full = None
+        for chunk in llm.stream(messages, config=config):
+            if chunk.content:
+                on_token(chunk.content)
+            full = chunk if full is None else full + chunk
 
-        full_content = ""
-        tool_calls_accumulator: dict[int, dict] = {}
+        if full is None:
+            return AIMessage(content="")
 
-        for chunk in response:
-            delta = chunk.choices[0].delta
-
-            if delta.content:
-                full_content += delta.content
-                on_token(delta.content)
-
-            if hasattr(delta, "tool_calls") and delta.tool_calls:
-                for tc_delta in delta.tool_calls:
-                    idx = tc_delta.index
-                    if idx not in tool_calls_accumulator:
-                        tool_calls_accumulator[idx] = {
-                            "id": "",
-                            "name": "",
-                            "arguments": "",
-                        }
-                    if tc_delta.id:
-                        tool_calls_accumulator[idx]["id"] = tc_delta.id
-                    if hasattr(tc_delta, "function") and tc_delta.function:
-                        if tc_delta.function.name:
-                            tool_calls_accumulator[idx]["name"] = tc_delta.function.name
-                        if tc_delta.function.arguments:
-                            tool_calls_accumulator[idx]["arguments"] += tc_delta.function.arguments
-
-        tool_calls = []
-        for idx in sorted(tool_calls_accumulator.keys()):
-            tc = tool_calls_accumulator[idx]
-            try:
-                args = json.loads(tc["arguments"]) if tc["arguments"] else {}
-            except json.JSONDecodeError:
-                args = {}
-            tool_calls.append(
-                {
-                    "id": tc["id"],
-                    "name": tc["name"],
-                    "args": args,
-                }
-            )
-
-        if tool_calls:
-            return AIMessage(content=full_content, tool_calls=tool_calls)
-        return AIMessage(content=full_content)
+        return AIMessage(
+            content=full.content or "",
+            tool_calls=full.tool_calls if full.tool_calls else [],
+        )

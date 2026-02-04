@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from ..components import WorkflowComponents
 from ..parsing import parse_review
@@ -23,7 +24,7 @@ class ReviewNode(NodeMixin):
     def __init__(self, components: WorkflowComponents) -> None:
         self.components = components
 
-    def __call__(self, state: AgentState) -> dict[str, Any]:
+    def __call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         """Review execution results and determine next steps."""
         c = self.components
         c.callback.phase_start("review")
@@ -46,7 +47,7 @@ class ReviewNode(NodeMixin):
         ]
 
         logger.debug("review_node: sending review request to LLM")
-        response = c.llm.chat(messages)
+        response = c.llm.chat(messages, config=config)
 
         review = parse_review(response.content)
         logger.info(

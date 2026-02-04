@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from ..components import WorkflowComponents
 from ..state import AgentState
@@ -23,7 +24,7 @@ class ActNode(NodeMixin):
     def __init__(self, components: WorkflowComponents) -> None:
         self.components = components
 
-    def __call__(self, state: AgentState) -> dict[str, Any]:
+    def __call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         """Execute the current step in the plan."""
         c = self.components
         system_prompt = self._get_prompt("actor", state)
@@ -64,9 +65,10 @@ class ActNode(NodeMixin):
                 messages,
                 on_token=lambda t: c.callback.token("act", t),
                 tools=tools,
+                config=config,
             )
         else:
-            response = c.llm.chat(messages, tools=tools)
+            response = c.llm.chat(messages, tools=tools, config=config)
 
         result_messages = [response]
         step_result = response.content
@@ -89,9 +91,10 @@ class ActNode(NodeMixin):
                 final_response = c.llm.stream_with_callback(
                     messages,
                     on_token=lambda t: c.callback.token("act", t),
+                    config=config,
                 )
             else:
-                final_response = c.llm.chat(messages)
+                final_response = c.llm.chat(messages, config=config)
             result_messages.append(final_response)
             step_result = final_response.content
 

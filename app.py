@@ -6,10 +6,14 @@ from pathlib import Path
 
 import streamlit as st
 import yaml
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from src.conversation.history import ConversationHistoryManager
 from src.llm.client import LLMClient
 from src.observability import create_callback
+from src.observability import flush as flush_observability
 from src.prompts.registry import PromptRegistry
 from src.skills.registry import SkillRegistry
 from src.tools.registry import ToolRegistry
@@ -248,8 +252,8 @@ def _run_workflow_streaming(
             metadata={
                 "source": "streamlit",
                 "user_request": actual_request[:100],
-                "skill": active_skill.name if active_skill else None,
-                "auto_select": use_auto_select,
+                "skill": active_skill.name if active_skill else "none",
+                "auto_select": str(use_auto_select).lower(),
             },
         )
 
@@ -376,8 +380,8 @@ def _run_workflow_streaming(
                 final_state.update(state)
 
         # Flush observability traces after workflow completion
-        if obs_callback and hasattr(obs_callback, "flush"):
-            obs_callback.flush()
+        if obs_callback:
+            flush_observability()
 
     except Exception as e:
         logger.exception("Workflow execution failed")
