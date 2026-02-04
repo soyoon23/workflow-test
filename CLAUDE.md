@@ -23,6 +23,14 @@ uv run pytest
 python visualize_graph.py
 ```
 
+## Recent Changes (2026-02-04)
+
+- LLM stack now uses `langchain-openai`'s `ChatOpenAI` (via LiteLLM proxy). Always pass the `RunnableConfig` from LangGraph nodes down to `LLMClient` so Langfuse callbacks capture every call.
+- Added official Langfuse v3 integration. Use `create_callback()` to get both the callback handler and tracing context, and call `src/observability.flush()` once a workflow run completes to ensure traces are persisted.
+- `python-dotenv` is loaded at `app.py` startup so secrets can live in `.env`. `config.yaml` is gitignored—copy from `config.yaml.example` when bootstrapping local envs.
+- Workflow metadata sent to observability is now normalized (`skill="none"`, `auto_select` as lowercase string) to keep Langfuse dashboards clean.
+- Dependencies updated (`langchain`, `langchain-openai`, `python-dotenv`), so run `uv sync` after pulling.
+
 ## Architecture
 
 This is a **Plan-Act-Review** AI workflow built on LangGraph and LiteLLM with a Streamlit chat UI supporting **multi-turn conversations**.
@@ -47,7 +55,7 @@ src/workflow/
 ```
 
 **Key types:**
-- **`BaseNode`** (Protocol) — Any callable `(AgentState) -> dict[str, Any]` satisfies this. Matches LangGraph's node interface.
+- **`BaseNode`** (Protocol) — Any callable `(AgentState, RunnableConfig) -> dict[str, Any]` satisfies this. LangGraph auto-passes `RunnableConfig` (with callback handlers) to each node.
 - **`NodeMixin`** — Provides shared helpers (`_get_prompt`, `_get_skill`, `_get_tools`) used by all built-in nodes.
 - **`WorkflowComponents`** — Bundles `LLMClient`, `PromptRegistry`, `ToolRegistry`, `SkillRegistry`, `StreamCallback`, and `ConversationContextBuilder`.
 
@@ -84,11 +92,15 @@ Three registries manage extensible components:
 
 ### LLM Client
 
-`src/llm/client.py` wraps LiteLLM for OpenAI-compatible API calls, converting between LangChain message types and OpenAI format. Configured via `config.yaml` to point at a LiteLLM proxy (default `localhost:4000`).
+`src/llm/client.py` wraps `langchain-openai`'s `ChatOpenAI` pointed at a LiteLLM proxy. All LLM calls are proper LangChain Runnable invocations, so `RunnableConfig` (containing Langfuse callback handlers) automatically captures full input/output. Configured via `config.yaml` to point at a LiteLLM proxy (default `localhost:4000`).
+
+### Observability
+
+`src/observability/` provides Langfuse v3 integration via the official `langfuse.langchain.CallbackHandler`. Custom attributes (trace name, metadata, session/user IDs) are propagated via `langfuse.propagate_attributes`. The module-level `flush()` function handles trace flushing and propagation context cleanup.
 
 ### Adding New Components
 
-- **Workflow node**: Implement `__call__(self, state: AgentState) -> dict[str, Any]` (satisfies `BaseNode` protocol). Use `NodeMixin` for shared helpers. Initialize with `WorkflowComponents`.
+- **Workflow node**: Implement `__call__(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]` (satisfies `BaseNode` protocol). Pass `config` to LLM calls for callback propagation. Use `NodeMixin` for shared helpers. Initialize with `WorkflowComponents`.
 - **Prompt version**: Add a YAML file to `src/prompts/templates/` named `{role}_v{N}.yaml`
 - **Tool**: Add implementation to `src/tools/base.py` and register in `src/tools/registry.py`
 - **Skill**: Add a YAML file to `src/skills/templates/` with name, description, trigger, prompt, and tools fields
@@ -96,7 +108,9 @@ Three registries manage extensible components:
 
 ## Configuration
 
-`config.yaml` holds LLM connection settings (base_url, model, api_key), default prompt version, workflow limits (max_iterations), and conversation history settings (max_history_turns, include_plan_detail_turns). The Streamlit sidebar also allows runtime overrides.
+Copy `config.yaml.example` to `config.yaml` and edit. It holds LLM connection settings (base_url, model, api_key), default prompt version, workflow limits (max_iterations), conversation history settings (max_history_turns, include_plan_detail_turns), and observability settings. `config.yaml` is gitignored to protect secrets.
+
+Environment variables can also be loaded from a `.env` file (via `python-dotenv`). Langfuse credentials (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`) can be set via env vars or `config.yaml`. The Streamlit sidebar also allows runtime overrides.
 
 ## Code Style
 
