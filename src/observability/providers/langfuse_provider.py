@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class LangfuseTracingContext(TracingContext):
-    """TracingContext backed by a Langfuse trace object."""
+    """TracingContext backed by a Langfuse root span (v3 API)."""
 
-    def __init__(self, trace: Any):
-        self._trace = trace
+    def __init__(self, root_span: Any):
+        self._root_span = root_span
 
     def create_span(
         self,
@@ -28,7 +28,7 @@ class LangfuseTracingContext(TracingContext):
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> SpanHandle:
-        span = self._trace.span(name=name, metadata=metadata or {})
+        span = self._root_span.start_span(name=name, metadata=metadata or {})
         return SpanHandle(raw=span)
 
     def end_span(
@@ -47,11 +47,13 @@ class LangfuseTracingContext(TracingContext):
             kwargs["output"] = output
         if metadata is not None:
             kwargs["metadata"] = metadata
-        raw.end(**kwargs)
+        if kwargs:
+            raw.update(**kwargs)
+        raw.end()
 
 
 class LangfuseCallbackHandler(BaseCallbackHandler):
-    """Langfuse callback handler for LangGraph workflows.
+    """Langfuse callback handler for LangGraph workflows (v3 API).
 
     Automatically captures:
     - Node executions (plan, act, review)
@@ -64,7 +66,9 @@ class LangfuseCallbackHandler(BaseCallbackHandler):
         from langfuse import Langfuse
 
         self.langfuse = Langfuse()
-        self.trace = self.langfuse.trace(name=trace_name, metadata=metadata or {})
+        self._root_span = self.langfuse.start_span(
+            name=trace_name, metadata=metadata or {}
+        )
         self.current_span = None
         self.node_spans: Dict[str, Any] = {}
 
@@ -82,46 +86,42 @@ class LangfuseCallbackHandler(BaseCallbackHandler):
 
         if "plan" in node_name.lower():
             span_name = "plan_node"
-            metadata = {"role": "planner"}
+            meta = {"role": "planner"}
         elif "act" in node_name.lower():
             span_name = "act_node"
-            metadata = {"role": "actor"}
+            meta = {"role": "actor"}
         elif "review" in node_name.lower():
             span_name = "review_node"
-            metadata = {"role": "reviewer"}
+            meta = {"role": "reviewer"}
         else:
             span_name = node_name
-            metadata = {}
+            meta = {}
 
-        self.node_spans[str(run_id)] = {
-            "span_name": span_name,
-            "metadata": metadata,
-            "input": inputs,
-        }
+        span = self._root_span.start_span(
+            name=span_name, metadata=meta, input=inputs
+        )
+        self.node_spans[str(run_id)] = {"span": span}
 
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
         run_id = kwargs.get("run_id")
         span_info = self.node_spans.get(str(run_id))
 
         if span_info:
-            span = self.trace.span(
-                name=span_info["span_name"],
-                metadata=span_info["metadata"],
-            )
-            span.end(
-                input=span_info["input"],
-                output=outputs,
-            )
+            span_info["span"].update(output=outputs)
+            span_info["span"].end()
             del self.node_spans[str(run_id)]
 
-    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
+    def on_llm_start(
+        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
+    ) -> None:
         run_id = kwargs.get("run_id")
 
-        self.node_spans[str(run_id)] = {
-            "type": "llm",
-            "prompts": prompts,
-            "model": serialized.get("name", "unknown"),
-        }
+        generation = self._root_span.start_generation(
+            name="llm_call",
+            model=serialized.get("name", "unknown"),
+            input=prompts,
+        )
+        self.node_spans[str(run_id)] = {"type": "llm", "generation": generation}
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         run_id = kwargs.get("run_id")
@@ -133,10 +133,7 @@ class LangfuseCallbackHandler(BaseCallbackHandler):
                 for gen in generations:
                     outputs.append(gen.text)
 
-            generation = self.trace.generation(
-                name="llm_call",
-                model=llm_info["model"],
-                input=llm_info["prompts"],
+            llm_info["generation"].update(
                 output=outputs[0] if outputs else "",
                 metadata={
                     "token_usage": response.llm_output.get("token_usage")
@@ -144,34 +141,34 @@ class LangfuseCallbackHandler(BaseCallbackHandler):
                     else None
                 },
             )
-            generation.end()
+            llm_info["generation"].end()
             del self.node_spans[str(run_id)]
 
-    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> None:
+    def on_tool_start(
+        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
+    ) -> None:
         run_id = kwargs.get("run_id")
 
-        self.node_spans[str(run_id)] = {
-            "type": "tool",
-            "name": serialized.get("name", "unknown"),
-            "input": input_str,
-        }
+        span = self._root_span.start_span(
+            name=f"tool_{serialized.get('name', 'unknown')}",
+            metadata={"tool_type": "tool"},
+            input=input_str,
+        )
+        self.node_spans[str(run_id)] = {"type": "tool", "span": span}
 
     def on_tool_end(self, output: str, **kwargs: Any) -> None:
         run_id = kwargs.get("run_id")
         tool_info = self.node_spans.get(str(run_id))
 
         if tool_info and tool_info.get("type") == "tool":
-            span = self.trace.span(
-                name=f"tool_{tool_info['name']}",
-                metadata={"tool_type": "tool"},
-            )
-            span.end(
-                input=tool_info["input"],
-                output=output,
-            )
+            tool_info["span"].update(output=output)
+            tool_info["span"].end()
             del self.node_spans[str(run_id)]
 
     def flush(self):
+        if self._root_span:
+            self._root_span.end()
+            self._root_span = None
         self.langfuse.flush()
 
 
@@ -223,7 +220,7 @@ class LangfuseProvider(ObservabilityProvider):
 
         handler = LangfuseCallbackHandler(trace_name=trace_name, metadata=metadata)
         self._current_handler = handler
-        self._current_context = LangfuseTracingContext(handler.trace)
+        self._current_context = LangfuseTracingContext(handler._root_span)
         return handler
 
     def get_tracing_context(self) -> Optional[LangfuseTracingContext]:
