@@ -9,6 +9,7 @@ import yaml
 
 from src.conversation.history import ConversationHistoryManager
 from src.llm.client import LLMClient
+from src.observability import create_callback
 from src.prompts.registry import PromptRegistry
 from src.skills.registry import SkillRegistry
 from src.tools.registry import ToolRegistry
@@ -77,6 +78,10 @@ def _init_session_state(config: dict) -> None:
             detail_window=conv_config.get("include_plan_detail_turns", 1),
         )
         st.session_state.chat_messages = []
+
+    # Store config for observability callback creation per workflow execution
+    if "config" not in st.session_state:
+        st.session_state.config = config
 
 
 def _render_sidebar(config: dict) -> tuple:
@@ -234,6 +239,22 @@ def _run_workflow_streaming(
     """Run the workflow with streaming and return the final state."""
     history_mgr = st.session_state.history_manager
 
+    # Create observability callback for this workflow execution
+    from datetime import datetime
+
+    obs_callback = None
+    if st.session_state.get("config"):
+        obs_callback, _obs_ctx = create_callback(
+            st.session_state.config,
+            trace_name=f"workflow_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            metadata={
+                "source": "streamlit",
+                "user_request": actual_request[:100],
+                "skill": active_skill.name if active_skill else None,
+                "auto_select": use_auto_select,
+            },
+        )
+
     callback = StreamCallback()
 
     # Mutable UI state shared with the event handler
@@ -336,6 +357,9 @@ def _run_workflow_streaming(
 
     callback.set_handler(_handle_event)
 
+    # Prepare callbacks
+    callbacks = [obs_callback] if obs_callback else None
+
     final_state: dict = {}
     try:
         for event in stream_workflow(
@@ -348,9 +372,14 @@ def _run_workflow_streaming(
             auto_select_skill=use_auto_select,
             conversation_history=history_mgr.history,
             stream_callback=callback,
+            callbacks=callbacks,
         ):
             for _, state in event.items():
                 final_state.update(state)
+
+        # Flush observability traces after workflow completion
+        if obs_callback and hasattr(obs_callback, "flush"):
+            obs_callback.flush()
 
     except Exception as e:
         logger.exception("Workflow execution failed")

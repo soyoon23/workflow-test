@@ -6,6 +6,7 @@ from deepeval.metrics import ToolCorrectnessMetric
 from deepeval.test_case import LLMTestCase, ToolCall
 
 from .conftest import load_goldens
+from .traced_workflow import _traced_act
 from .metrics.step_execution import StepRelevancyGEval
 
 
@@ -14,10 +15,11 @@ class TestActNodeEval:
     """Evaluate Act node execution quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_nodes, eval_model):
+    def _setup(self, workflow_nodes, eval_model, request):
         self.nodes = workflow_nodes
         self.eval_model = eval_model
         self.goldens = load_goldens("act_goldens")
+        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
 
     def _make_state_with_step(self, step_description: str, skill_name=None) -> dict:
         """Create a state with a single pending step for act_node to execute."""
@@ -55,15 +57,10 @@ class TestActNodeEval:
         expected_tools_names = metadata.get("expected_tools", [])
 
         state = self._make_state_with_step(step_desc)
-        result = self.nodes.act_node(state)
+        result, tool_calls = _traced_act(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         # Collect actual tool calls from messages
-        actual_tools: list[ToolCall] = []
-        for msg in result.get("messages", []):
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    if tc["name"] != "use_skill":
-                        actual_tools.append(ToolCall(name=tc["name"]))
+        actual_tools: list[ToolCall] = [tc for tc in tool_calls if tc.name != "use_skill"]
 
         expected_tools = [ToolCall(name=n) for n in expected_tools_names]
 
@@ -89,7 +86,7 @@ class TestActNodeEval:
         step_desc = metadata.get("step_description", golden["input"])
 
         state = self._make_state_with_step(step_desc)
-        result = self.nodes.act_node(state)
+        result, _ = _traced_act(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         step_result = result.get("plan", [{}])[0].get("result", "")
         test_case = LLMTestCase(

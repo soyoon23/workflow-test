@@ -8,9 +8,13 @@ This file is evaluation-only — production code in src/ is not modified.
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 from deepeval.test_case import ToolCall
 from deepeval.tracing import observe, update_current_span, update_current_trace
+
+if TYPE_CHECKING:
+    from src.observability.base import TracingContext
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -128,20 +132,57 @@ def traced_workflow(user_request: str, config: dict) -> str:
 
 
 @observe(type="llm", name="plan")
-def _traced_plan(nodes, state: dict) -> dict:
-    """Traced wrapper around plan_node."""
+def _traced_plan(
+    nodes,
+    state: dict,
+    tracing_ctx: Optional["TracingContext"] = None,
+) -> dict:
+    """Traced wrapper around plan_node with observability integration."""
     result = nodes.plan_node(state)
     plan_steps = result.get("plan", [])
     plan_text = "\n".join(f"{s['step_number']}. {s['description']}" for s in plan_steps)
+
+    # Observability span (provider-agnostic)
+    if tracing_ctx:
+        span = tracing_ctx.create_span(
+            name="plan_node",
+            metadata={"role": "planner"},
+        )
+        tracing_ctx.end_span(
+            span,
+            input=state["user_request"],
+            output=plan_text,
+            metadata={
+                "plan_step_count": len(plan_steps),
+                "active_skill": result.get("active_skill_name"),
+            },
+        )
+
+    # DeepEval span update
     update_current_span(input=state["user_request"], output=plan_text)
     return result
 
 
 @observe(type="tool", name="act")
-def _traced_act(nodes, state: dict) -> tuple[dict, list[ToolCall]]:
+def _traced_act(
+    nodes,
+    state: dict,
+    tracing_ctx: Optional["TracingContext"] = None,
+) -> tuple[dict, list[ToolCall]]:
     """Traced wrapper around act_node. Returns (result, tools_called)."""
     step_idx = state["current_step_index"]
     step = state["plan"][step_idx]
+
+    span = None
+    if tracing_ctx:
+        span = tracing_ctx.create_span(
+            name="act_node",
+            metadata={
+                "role": "actor",
+                "step_number": step.get("step_number"),
+                "active_skill": state.get("active_skill_name"),
+            },
+        )
 
     result = nodes.act_node(state)
 
@@ -152,7 +193,20 @@ def _traced_act(nodes, state: dict) -> tuple[dict, list[ToolCall]]:
             for tc in msg.tool_calls:
                 tools_called.append(ToolCall(name=tc["name"]))
 
-    step_result_text = step.get("result", "") or ""
+    updated_plan = result.get("plan") or state.get("plan", [])
+    updated_step = updated_plan[step_idx] if step_idx < len(updated_plan) else step
+    step_result_text = updated_step.get("result", "") or ""
+
+    if tracing_ctx and span:
+        tracing_ctx.end_span(
+            span,
+            input=step["description"],
+            output=step_result_text,
+            metadata={
+                "tools_called": [tc.name for tc in tools_called],
+            },
+        )
+
     update_current_span(
         input=step["description"],
         output=step_result_text,
@@ -162,11 +216,37 @@ def _traced_act(nodes, state: dict) -> tuple[dict, list[ToolCall]]:
 
 
 @observe(type="llm", name="review")
-def _traced_review(nodes, state: dict) -> dict:
+def _traced_review(
+    nodes,
+    state: dict,
+    tracing_ctx: Optional["TracingContext"] = None,
+) -> dict:
     """Traced wrapper around review_node."""
+    span = None
+    if tracing_ctx:
+        span = tracing_ctx.create_span(
+            name="review_node",
+            metadata={
+                "role": "reviewer",
+            },
+        )
+
     result = nodes.review_node(state)
+    final_answer = result.get("final_answer", "") or ""
+
+    if tracing_ctx and span:
+        tracing_ctx.end_span(
+            span,
+            input=state["user_request"],
+            output=final_answer,
+            metadata={
+                "key_facts_count": len(result.get("review_key_facts", []) or []),
+                "is_complete": result.get("is_complete"),
+            },
+        )
+
     update_current_span(
         input=state["user_request"],
-        output=result.get("final_answer", "") or "",
+        output=final_answer,
     )
     return result

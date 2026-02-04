@@ -1,8 +1,9 @@
 """LangGraph workflow definition for Plan-Act workflow."""
 
 import logging
-from typing import Literal, Optional
+from typing import Any, List, Literal, Optional
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langgraph.graph import END, StateGraph
 
 from ..llm.client import LLMClient
@@ -159,8 +160,14 @@ def run_workflow(
     auto_select_skill: bool = False,
     conversation_history: Optional[list[ConversationTurn]] = None,
     stream_callback: Optional[StreamCallback] = None,
+    callbacks: Optional[List[BaseCallbackHandler]] = None,
 ) -> dict:
-    """Run the workflow with a user request."""
+    """Run the workflow with a user request.
+
+    Args:
+        callbacks: Optional list of callback handlers (e.g., LangfuseCallbackHandler)
+                   for observability and tracing.
+    """
     workflow = create_workflow(
         llm_client,
         prompt_registry,
@@ -175,12 +182,18 @@ def run_workflow(
         user_request, skill, auto_select_skill, conversation_history
     )
     logger.info(
-        "Running workflow: request=%s, history_turns=%d",
+        "Running workflow: request=%s, history_turns=%d, callbacks=%s",
         user_request[:80],
         len(initial_state["conversation_history"]),
+        "enabled" if callbacks else "disabled",
     )
 
-    final_state = workflow.invoke(initial_state)
+    # Build config for LangGraph with callbacks
+    config: dict[str, Any] = {}
+    if callbacks:
+        config["callbacks"] = callbacks
+
+    final_state = workflow.invoke(initial_state, config=config if config else None)
     return final_state
 
 
@@ -194,8 +207,14 @@ def stream_workflow(
     auto_select_skill: bool = False,
     conversation_history: Optional[list[ConversationTurn]] = None,
     stream_callback: Optional[StreamCallback] = None,
+    callbacks: Optional[List[BaseCallbackHandler]] = None,
 ):
-    """Stream the workflow execution."""
+    """Stream the workflow execution.
+
+    Args:
+        callbacks: Optional list of callback handlers (e.g., LangfuseCallbackHandler)
+                   for observability and tracing.
+    """
     workflow = create_workflow(
         llm_client,
         prompt_registry,
@@ -210,10 +229,16 @@ def stream_workflow(
         user_request, skill, auto_select_skill, conversation_history
     )
     logger.info(
-        "Streaming workflow: request=%s, history_turns=%d",
+        "Streaming workflow: request=%s, history_turns=%d, callbacks=%s",
         user_request[:80],
         len(initial_state["conversation_history"]),
+        "enabled" if callbacks else "disabled",
     )
 
-    for event in workflow.stream(initial_state):
+    # Build config for LangGraph with callbacks
+    config: dict[str, Any] = {}
+    if callbacks:
+        config["callbacks"] = callbacks
+
+    for event in workflow.stream(initial_state, config=config if config else None):
         yield event

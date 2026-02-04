@@ -6,6 +6,7 @@ from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
 from deepeval.test_case import LLMTestCase
 
 from .conftest import load_goldens
+from .traced_workflow import _traced_review
 from .metrics.review_quality import CompletionDecisionMetric, KeyFactsQualityGEval
 
 
@@ -14,10 +15,11 @@ class TestReviewNodeEval:
     """Evaluate Review node quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_nodes, eval_model):
+    def _setup(self, workflow_nodes, eval_model, request):
         self.nodes = workflow_nodes
         self.eval_model = eval_model
         self.goldens = load_goldens("review_goldens")
+        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
 
     def _make_state_with_completed_plan(self, golden: dict) -> dict:
         """Build a state with completed plan steps from golden metadata."""
@@ -57,7 +59,7 @@ class TestReviewNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state_with_completed_plan(golden)
-        result = self.nodes.review_node(state)
+        result = _traced_review(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         final_answer = result.get("final_answer", "") or ""
         plan_context = [step["result"] for step in state["plan"] if step.get("result")]
@@ -79,7 +81,7 @@ class TestReviewNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state_with_completed_plan(golden)
-        result = self.nodes.review_node(state)
+        result = _traced_review(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         final_answer = result.get("final_answer", "") or ""
         plan_context = [step["result"] for step in state["plan"] if step.get("result")]
@@ -101,7 +103,7 @@ class TestReviewNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state_with_completed_plan(golden)
-        result = self.nodes.review_node(state)
+        result = _traced_review(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         key_facts = result.get("review_key_facts", [])
         key_facts_text = "\n".join(f"- {f}" for f in key_facts) if key_facts else "None"
@@ -124,7 +126,7 @@ class TestReviewNodeEval:
         golden = self.goldens[golden_idx]
         expected_complete = golden.get("metadata", {}).get("expected_complete")
         state = self._make_state_with_completed_plan(golden)
-        result = self.nodes.review_node(state)
+        result = _traced_review(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         actual_complete = result.get("is_complete", False)
 

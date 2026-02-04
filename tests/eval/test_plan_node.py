@@ -10,6 +10,7 @@ from .metrics.plan_quality import (
     PlanDecompositionGEval,
     SkillSelectionMetric,
 )
+from .traced_workflow import _traced_plan
 
 
 @pytest.mark.eval
@@ -17,9 +18,11 @@ class TestPlanNodeEval:
     """Evaluate Plan node output quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_nodes):
+    def _setup(self, workflow_nodes, request):
         self.nodes = workflow_nodes
         self.goldens = load_goldens("plan_goldens")
+        # Get observability tracing context from pytest fixture
+        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
 
     def _make_state(self, user_request: str, auto_select: bool = True) -> dict:
         return {
@@ -45,7 +48,7 @@ class TestPlanNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state(golden["input"])
-        result = self.nodes.plan_node(state)
+        result = _traced_plan(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         plan_steps = result.get("plan", [])
         plan_text = "\n".join(f"{s['step_number']}. {s['description']}" for s in plan_steps)
@@ -65,7 +68,7 @@ class TestPlanNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state(golden["input"])
-        result = self.nodes.plan_node(state)
+        result = _traced_plan(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         plan_steps = result.get("plan", [])
         plan_text = "\n".join(f"{s['step_number']}. {s['description']}" for s in plan_steps)
@@ -87,7 +90,7 @@ class TestPlanNodeEval:
         expected_skill = golden.get("metadata", {}).get("expected_skill")
 
         state = self._make_state(golden["input"], auto_select=True)
-        result = self.nodes.plan_node(state)
+        result = _traced_plan(self.nodes, state, tracing_ctx=self.tracing_ctx)
 
         actual_skill = result.get("active_skill_name")
         plan_text = "\n".join(
