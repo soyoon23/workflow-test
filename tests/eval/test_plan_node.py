@@ -18,14 +18,15 @@ class TestPlanNodeEval:
     """Evaluate Plan node output quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_components, request, obs_test_trace):
+    def _setup(self, workflow_components, obs_test_trace):
         from src.workflow.nodes import PlanNode
 
         self.plan_node = PlanNode(workflow_components)
         self.goldens = load_goldens("plan_goldens")
-        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        # Use obs_test_trace directly - it yields the callback
-        self.runnable_config = _make_runnable_config(obs_test_trace)
+        # Unpack (callback, tracing_ctx) tuple from obs_test_trace
+        obs_callback, tracing_ctx = obs_test_trace
+        self.tracing_ctx = tracing_ctx
+        self.runnable_config = _make_runnable_config(obs_callback)
 
     def _make_state(self, user_request: str, auto_select: bool = True) -> dict:
         return {

@@ -15,15 +15,16 @@ class TestReviewNodeEval:
     """Evaluate Review node quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_components, eval_model, request, obs_test_trace):
+    def _setup(self, workflow_components, eval_model, obs_test_trace):
         from src.workflow.nodes import ReviewNode
 
         self.review_node = ReviewNode(workflow_components)
         self.eval_model = eval_model
         self.goldens = load_goldens("review_goldens")
-        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        # Use obs_test_trace directly - it yields the callback
-        self.runnable_config = _make_runnable_config(obs_test_trace)
+        # Unpack (callback, tracing_ctx) tuple from obs_test_trace
+        obs_callback, tracing_ctx = obs_test_trace
+        self.tracing_ctx = tracing_ctx
+        self.runnable_config = _make_runnable_config(obs_callback)
 
     def _make_state_with_completed_plan(self, golden: dict) -> dict:
         """Build a state with completed plan steps from golden metadata."""

@@ -15,15 +15,16 @@ class TestActNodeEval:
     """Evaluate Act node execution quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_components, eval_model, request, obs_test_trace):
+    def _setup(self, workflow_components, eval_model, obs_test_trace):
         from src.workflow.nodes import ActNode
 
         self.act_node = ActNode(workflow_components)
         self.eval_model = eval_model
         self.goldens = load_goldens("act_goldens")
-        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        # Use obs_test_trace directly - it yields the callback
-        self.runnable_config = _make_runnable_config(obs_test_trace)
+        # Unpack (callback, tracing_ctx) tuple from obs_test_trace
+        obs_callback, tracing_ctx = obs_test_trace
+        self.tracing_ctx = tracing_ctx
+        self.runnable_config = _make_runnable_config(obs_callback)
 
     def _make_state_with_step(self, step_description: str, skill_name=None) -> dict:
         """Create a state with a single pending step for act_node to execute."""

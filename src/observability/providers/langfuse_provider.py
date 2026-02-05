@@ -21,11 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 class LangfuseTracingContext(TracingContext):
-    """TracingContext backed by the global Langfuse v3 client.
+    """TracingContext for creating child spans under the current trace.
 
-    Spans created here are attached to the currently-active trace (set by
-    ``propagate_attributes``).  If no active trace exists the spans become
-    top-level traces — still visible in the Langfuse UI but not nested.
+    In Langfuse v3, spans created via start_span() automatically attach
+    to the current trace/span context set by start_as_current_span().
     """
 
     def create_span(
@@ -36,6 +35,7 @@ class LangfuseTracingContext(TracingContext):
     ) -> SpanHandle:
         from langfuse import get_client
 
+        # In v3, start_span() auto-attaches to current trace context
         span = get_client().start_span(name=name, metadata=metadata or {})
         return SpanHandle(raw=span)
 
@@ -48,15 +48,12 @@ class LangfuseTracingContext(TracingContext):
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         raw = span._raw
-        kwargs: dict[str, Any] = {}
         if input is not None:
-            kwargs["input"] = input
+            raw.update(input=input)
         if output is not None:
-            kwargs["output"] = output
+            raw.update(output=output)
         if metadata is not None:
-            kwargs["metadata"] = metadata
-        if kwargs:
-            raw.update(**kwargs)
+            raw.update(metadata=metadata)
         raw.end()
 
 
@@ -71,7 +68,7 @@ class LangfuseProvider(ObservabilityProvider):
     Lifecycle (per workflow run)::
 
         provider.configure(config)          # set env-var credentials
-        handler = provider.create_callback(  # opens propagate_attributes ctx
+        handler = provider.create_callback(  # creates parent span + handler
             trace_name="workflow_20240101",
             metadata={...},
             session_id="session-abc",
@@ -79,12 +76,13 @@ class LangfuseProvider(ObservabilityProvider):
             tags=["eval"],
         )
         stream_workflow(..., callbacks=[handler])
-        provider.flush()                    # flush + close propagate ctx
+        provider.flush()                    # flush + end parent span
     """
 
     def __init__(self):
         self._current_handler: Any = None
-        self._attr_context: Any = None
+        self._span_context: Any = None  # Context manager from start_as_current_span
+        self._current_span: Any = None  # The actual span object
 
     # -- identity / availability -------------------------------------------
 
@@ -140,43 +138,43 @@ class LangfuseProvider(ObservabilityProvider):
         user_id: Optional[str] = None,
         tags: Optional[list[str]] = None,
     ) -> Any:
-        """Create the official v3 ``CallbackHandler``.
+        """Create the official v3 ``CallbackHandler`` with a parent span.
 
-        Custom attributes (trace name, metadata, session/user IDs, tags) are
-        propagated via ``langfuse.propagate_attributes`` so that **every** span
-        the handler creates is automatically tagged.
-
-        The propagation context is kept open until :meth:`flush` is called.
+        Uses start_as_current_span() to create a parent span. All LLM calls
+        via CallbackHandler and manual spans via get_tracing_context() will
+        automatically attach as children of this span.
         """
         if not self.is_available():
             return None
 
-        from langfuse import propagate_attributes
+        from langfuse import get_client
         from langfuse.langchain import CallbackHandler
 
-        # ---- propagate custom attributes to all child spans ----
-        propagate_kwargs: dict[str, Any] = {"trace_name": trace_name}
-        if metadata:
-            propagate_kwargs["metadata"] = metadata
+        client = get_client()
+
+        # ---- build metadata including session/user/tags ----
+        span_metadata: dict[str, Any] = metadata.copy() if metadata else {}
         if session_id:
-            propagate_kwargs["session_id"] = session_id
+            span_metadata["session_id"] = session_id
         if user_id:
-            propagate_kwargs["user_id"] = user_id
+            span_metadata["user_id"] = user_id
         if tags:
-            propagate_kwargs["tags"] = tags
+            span_metadata["tags"] = tags
 
-        self._attr_context = propagate_attributes(**propagate_kwargs)
-        self._attr_context.__enter__()
+        # ---- create parent span that will contain all children ----
+        self._span_context = client.start_as_current_span(
+            name=trace_name,
+            metadata=span_metadata if span_metadata else None,
+        )
+        self._current_span = self._span_context.__enter__()
 
-        # ---- create the official handler ----
+        # ---- create handler (auto-attaches to current span context) ----
         handler = CallbackHandler()
         self._current_handler = handler
 
         logger.info(
-            "Langfuse tracing started — trace_name=%s, session=%s, user=%s",
+            "Langfuse tracing started — trace_name=%s",
             trace_name,
-            session_id,
-            user_id,
         )
         return handler
 
@@ -186,18 +184,26 @@ class LangfuseProvider(ObservabilityProvider):
         """Return a ``TracingContext`` for manual span creation.
 
         Must be called *after* :meth:`create_callback`.
+        Returns a context that creates spans as children of the current span.
         """
-        if self._current_handler is not None:
+        if self._current_span is not None:
             return LangfuseTracingContext()
         return None
 
     # -- flush / teardown --------------------------------------------------
 
     def flush(self) -> None:
-        """Flush pending traces and close the propagation context.
+        """Flush pending traces and end the parent span.
 
         Safe to call multiple times or when no handler is active.
         """
+        try:
+            # End the parent span context
+            if self._span_context is not None:
+                self._span_context.__exit__(None, None, None)
+        except Exception:
+            logger.debug("Langfuse span exit failed", exc_info=True)
+
         try:
             from langfuse import get_client
 
@@ -205,10 +211,6 @@ class LangfuseProvider(ObservabilityProvider):
         except Exception:
             logger.debug("Langfuse flush failed", exc_info=True)
         finally:
-            if self._attr_context:
-                try:
-                    self._attr_context.__exit__(None, None, None)
-                except Exception:
-                    pass
-                self._attr_context = None
             self._current_handler = None
+            self._span_context = None
+            self._current_span = None
