@@ -56,6 +56,27 @@ class LangfuseTracingContext(TracingContext):
             raw.update(metadata=metadata)
         raw.end()
 
+    def update_parent_span(
+        self,
+        *,
+        input: Any = None,
+        output: Any = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Update the parent span's input/output/metadata."""
+        from langfuse import get_client
+
+        kwargs: dict[str, Any] = {}
+        if input is not None:
+            kwargs["input"] = input
+        if output is not None:
+            kwargs["output"] = output
+        if metadata is not None:
+            kwargs["metadata"] = metadata
+
+        if kwargs:
+            get_client().update_current_span(**kwargs)
+
 
 # ---------------------------------------------------------------------------
 # Provider

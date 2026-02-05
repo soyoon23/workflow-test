@@ -42,6 +42,19 @@ class TracingContext(ABC):
     ) -> None:
         """End a span with input/output data."""
 
+    def update_parent_span(
+        self,
+        *,
+        input: Any = None,
+        output: Any = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Update the parent span's input/output/metadata.
+
+        Optional method - default implementation does nothing.
+        """
+        pass
+
 
 class ObservabilityProvider(ABC):
     """Abstract base for observability providers.
