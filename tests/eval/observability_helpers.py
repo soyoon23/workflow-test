@@ -29,6 +29,60 @@ def _metric_success(metric: BaseMetric) -> Optional[bool]:
     return None
 
 
+def _extract_metric_details(metric: BaseMetric) -> dict[str, Any]:
+    """Extract all available evaluation details from a metric."""
+    details: dict[str, Any] = {
+        "name": _metric_label(metric),
+        "score": getattr(metric, "score", None),
+        "threshold": getattr(metric, "threshold", None),
+        "success": _metric_success(metric),
+        "reason": getattr(metric, "reason", None),
+    }
+
+    # GEval-specific fields
+    evaluation_steps = getattr(metric, "evaluation_steps", None)
+    if evaluation_steps:
+        details["evaluation_steps"] = evaluation_steps
+
+    evaluation_model = getattr(metric, "evaluation_model", None) or getattr(metric, "model", None)
+    if evaluation_model:
+        details["evaluation_model"] = str(evaluation_model)
+
+    criteria = getattr(metric, "criteria", None)
+    if criteria:
+        details["criteria"] = criteria
+
+    return details
+
+
+def _format_metric_output(details: dict[str, Any]) -> str:
+    """Format metric evaluation results into a human-readable string."""
+    lines = []
+
+    score = details.get("score")
+    threshold = details.get("threshold")
+    success = details.get("success")
+
+    if score is not None:
+        lines.append(f"Score: {score}")
+    if threshold is not None:
+        lines.append(f"Threshold: {threshold}")
+    if success is not None:
+        lines.append(f"Pass: {'YES' if success else 'NO'}")
+
+    reason = details.get("reason")
+    if reason:
+        lines.append(f"\nReason:\n{reason}")
+
+    evaluation_steps = details.get("evaluation_steps")
+    if evaluation_steps:
+        lines.append("\nEvaluation Steps:")
+        for i, step in enumerate(evaluation_steps, 1):
+            lines.append(f"  {i}. {step}")
+
+    return "\n".join(lines)
+
+
 def assert_metrics_with_tracing(
     test_case: LLMTestCase,
     metrics: Sequence[BaseMetric],
@@ -37,43 +91,65 @@ def assert_metrics_with_tracing(
     span_name: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Call deepeval.assert_test while emitting Langfuse spans for each metric run."""
+    """Call deepeval.assert_test while emitting per-metric Langfuse spans.
 
-    span = None
-    metric_names = [_metric_label(metric) for metric in metrics]
-    span_metadata = {"metric_names": metric_names}
-    if metadata:
-        span_metadata.update(metadata)
+    For each metric, a dedicated span is created containing:
+    - input: the test case input
+    - output: human-readable summary (score, threshold, pass/fail, reason)
+    - metadata: structured evaluation details (score, reason, criteria, etc.)
 
-    if tracing_ctx:
-        span = tracing_ctx.create_span(
-            name=span_name or "deepeval_metric",
-            metadata=span_metadata,
-        )
+    A summary span groups all metric results for quick overview.
+    """
 
     try:
         assert_test(test_case, list(metrics))
     finally:
-        if tracing_ctx and span:
-            metric_payload = []
-            for metric in metrics:
-                metric_payload.append(
-                    {
-                        "name": _metric_label(metric),
-                        "score": getattr(metric, "score", None),
-                        "threshold": getattr(metric, "threshold", None),
-                        "success": _metric_success(metric),
-                        "reason": getattr(metric, "reason", None),
-                    }
-                )
+        if not tracing_ctx:
+            return
 
-            trace_metadata = {"metrics": metric_payload}
+        test_input = getattr(test_case, "input", None)
+        metric_summaries = []
+
+        # Create a dedicated span per metric
+        for metric in metrics:
+            details = _extract_metric_details(metric)
+            metric_summaries.append(details)
+
+            span_meta = {**details}
             if metadata:
-                trace_metadata.update(metadata)
+                span_meta.update(metadata)
 
-            tracing_ctx.end_span(
-                span,
-                input=getattr(test_case, "input", None),
-                output=getattr(test_case, "actual_output", None),
-                metadata=trace_metadata,
+            metric_span = tracing_ctx.create_span(
+                name=f"eval:{details['name']}",
+                metadata={"metric_type": metric.__class__.__name__},
             )
+            tracing_ctx.end_span(
+                metric_span,
+                input=test_input,
+                output=_format_metric_output(details),
+                metadata=span_meta,
+            )
+
+        # Summary span for grouping
+        summary_span = tracing_ctx.create_span(
+            name=span_name or "deepeval_metrics",
+            metadata={"metric_names": [d["name"] for d in metric_summaries]},
+        )
+
+        summary_lines = []
+        for d in metric_summaries:
+            status = "PASS" if d.get("success") else "FAIL"
+            score = d.get("score")
+            score_str = f"{score}" if score is not None else "N/A"
+            summary_lines.append(f"[{status}] {d['name']}: {score_str}")
+
+        summary_meta: dict[str, Any] = {"metrics": metric_summaries}
+        if metadata:
+            summary_meta.update(metadata)
+
+        tracing_ctx.end_span(
+            summary_span,
+            input=test_input,
+            output="\n".join(summary_lines),
+            metadata=summary_meta,
+        )

@@ -81,19 +81,32 @@ def _merge_state(state: dict, update: dict) -> dict:
     return merged
 
 
+def _make_runnable_config(obs_callback=None) -> dict:
+    """Build a RunnableConfig dict with optional observability callback."""
+    if obs_callback:
+        return {"callbacks": [obs_callback]}
+    return {}
+
+
 @observe(type="agent")
-def traced_workflow(user_request: str, config: dict) -> str:
+def traced_workflow(user_request: str, config: dict, obs_callback=None) -> str:
     """Run the full Plan-Act-Review workflow with DeepEval tracing.
 
     This creates a complete execution trace that agentic metrics
     (TaskCompletion, PlanQuality, PlanAdherence, StepEfficiency) can
     evaluate.
+
+    Args:
+        obs_callback: Optional LangChain callback handler (e.g. Langfuse)
+            so that every LLM call inside nodes is captured.
     """
     built = _build_components(config)
     plan_node = built["plan_node"]
     act_node = built["act_node"]
     review_node = built["review_node"]
     components = built["components"]
+
+    runnable_config = _make_runnable_config(obs_callback)
 
     # Detect skill trigger
     skill, actual_request = components.skills.parse_input(user_request)
@@ -103,17 +116,17 @@ def traced_workflow(user_request: str, config: dict) -> str:
 
     for _ in range(max_iterations):
         # ---- Plan ----
-        plan_result = _traced_plan(plan_node, state)
+        plan_result = _traced_plan(plan_node, state, config=runnable_config)
         state = _merge_state(state, plan_result)
 
         # ---- Act (execute each step) ----
         while state["current_step_index"] < len(state.get("plan", [])):
-            act_result, step_tools = _traced_act(act_node, state)
+            act_result, step_tools = _traced_act(act_node, state, config=runnable_config)
             all_tools_called.extend(step_tools)
             state = _merge_state(state, act_result)
 
         # ---- Review ----
-        review_result = _traced_review(review_node, state)
+        review_result = _traced_review(review_node, state, config=runnable_config)
         state = _merge_state(state, review_result)
 
         if state.get("is_complete") or state.get("error"):

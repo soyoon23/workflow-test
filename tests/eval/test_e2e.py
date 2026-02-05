@@ -27,12 +27,13 @@ class TestE2EAgenticMetrics:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup(self, eval_config, eval_model, eval_threshold, request):
+    def _setup(self, eval_config, eval_model, eval_threshold, request, obs_test_trace):
         self.config = eval_config
         self.eval_model = eval_model
         self.threshold = eval_threshold
         self.goldens_data = load_goldens("e2e_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
+        self.obs_callback = getattr(request, "obs_callback", None)
 
     def test_task_completion(self):
         """Agent should complete the task successfully."""
@@ -44,7 +45,7 @@ class TestE2EAgenticMetrics:
         )
 
         for golden in dataset.evals_iterator(metrics=[metric]):
-            traced_workflow(golden.input, self.config)
+            traced_workflow(golden.input, self.config, obs_callback=self.obs_callback)
 
     def test_plan_quality(self):
         """Agent's plan should align well with the task."""
@@ -56,7 +57,7 @@ class TestE2EAgenticMetrics:
         )
 
         for golden in dataset.evals_iterator(metrics=[metric]):
-            traced_workflow(golden.input, self.config)
+            traced_workflow(golden.input, self.config, obs_callback=self.obs_callback)
 
     def test_plan_adherence(self):
         """Agent should follow its plan during execution."""
@@ -68,7 +69,7 @@ class TestE2EAgenticMetrics:
         )
 
         for golden in dataset.evals_iterator(metrics=[metric]):
-            traced_workflow(golden.input, self.config)
+            traced_workflow(golden.input, self.config, obs_callback=self.obs_callback)
 
     def test_step_efficiency(self):
         """Agent should execute steps efficiently without redundancy."""
@@ -80,7 +81,7 @@ class TestE2EAgenticMetrics:
         )
 
         for golden in dataset.evals_iterator(metrics=[metric]):
-            traced_workflow(golden.input, self.config)
+            traced_workflow(golden.input, self.config, obs_callback=self.obs_callback)
 
 
 @pytest.mark.eval
@@ -91,11 +92,13 @@ class TestE2EAnswerQuality:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup(self, eval_config, eval_model, eval_threshold):
+    def _setup(self, eval_config, eval_model, eval_threshold, request, obs_test_trace):
         self.config = eval_config
         self.eval_model = eval_model
         self.threshold = eval_threshold
         self.goldens_data = load_goldens("e2e_goldens")
+        self.tracing_ctx = getattr(request, "obs_tracing_context", None)
+        self.obs_callback = getattr(request, "obs_callback", None)
 
     @pytest.mark.parametrize("golden_idx", range(6))
     def test_answer_relevancy(self, golden_idx):
@@ -104,7 +107,7 @@ class TestE2EAnswerQuality:
             pytest.skip("Golden index out of range")
 
         golden = self.goldens_data[golden_idx]
-        state = run_workflow_for_eval(golden["input"], self.config)
+        state = run_workflow_for_eval(golden["input"], self.config, obs_callback=self.obs_callback)
         final_answer = state.get("final_answer", "") or ""
         plan_context = [step["result"] for step in state.get("plan", []) if step.get("result")]
 
@@ -132,7 +135,7 @@ class TestE2EAnswerQuality:
             pytest.skip("Golden index out of range")
 
         golden = self.goldens_data[golden_idx]
-        state = run_workflow_for_eval(golden["input"], self.config)
+        state = run_workflow_for_eval(golden["input"], self.config, obs_callback=self.obs_callback)
         final_answer = state.get("final_answer", "") or ""
         plan_context = [step["result"] for step in state.get("plan", []) if step.get("result")]
 

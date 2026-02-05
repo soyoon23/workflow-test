@@ -7,7 +7,7 @@ from deepeval.test_case import LLMTestCase
 from .conftest import load_goldens
 from .metrics.review_quality import CompletionDecisionMetric, KeyFactsQualityGEval
 from .observability_helpers import assert_metrics_with_tracing
-from .traced_workflow import _traced_review
+from .traced_workflow import _make_runnable_config, _traced_review
 
 
 @pytest.mark.eval
@@ -15,13 +15,14 @@ class TestReviewNodeEval:
     """Evaluate Review node quality using DeepEval metrics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, workflow_components, eval_model, request):
+    def _setup(self, workflow_components, eval_model, request, obs_test_trace):
         from src.workflow.nodes import ReviewNode
 
         self.review_node = ReviewNode(workflow_components)
         self.eval_model = eval_model
         self.goldens = load_goldens("review_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
+        self.runnable_config = _make_runnable_config(getattr(request, "obs_callback", None))
 
     def _make_state_with_completed_plan(self, golden: dict) -> dict:
         """Build a state with completed plan steps from golden metadata."""
@@ -61,7 +62,9 @@ class TestReviewNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state_with_completed_plan(golden)
-        result = _traced_review(self.review_node, state, tracing_ctx=self.tracing_ctx)
+        result = _traced_review(
+            self.review_node, state, tracing_ctx=self.tracing_ctx, config=self.runnable_config
+        )
 
         final_answer = result.get("final_answer", "") or ""
         plan_context = [step["result"] for step in state["plan"] if step.get("result")]
@@ -91,7 +94,9 @@ class TestReviewNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state_with_completed_plan(golden)
-        result = _traced_review(self.review_node, state, tracing_ctx=self.tracing_ctx)
+        result = _traced_review(
+            self.review_node, state, tracing_ctx=self.tracing_ctx, config=self.runnable_config
+        )
 
         final_answer = result.get("final_answer", "") or ""
         plan_context = [step["result"] for step in state["plan"] if step.get("result")]
@@ -121,7 +126,9 @@ class TestReviewNodeEval:
 
         golden = self.goldens[golden_idx]
         state = self._make_state_with_completed_plan(golden)
-        result = _traced_review(self.review_node, state, tracing_ctx=self.tracing_ctx)
+        result = _traced_review(
+            self.review_node, state, tracing_ctx=self.tracing_ctx, config=self.runnable_config
+        )
 
         key_facts = result.get("review_key_facts", [])
         key_facts_text = "\n".join(f"- {f}" for f in key_facts) if key_facts else "None"
@@ -153,7 +160,9 @@ class TestReviewNodeEval:
         golden = self.goldens[golden_idx]
         expected_complete = golden.get("metadata", {}).get("expected_complete")
         state = self._make_state_with_completed_plan(golden)
-        result = _traced_review(self.review_node, state, tracing_ctx=self.tracing_ctx)
+        result = _traced_review(
+            self.review_node, state, tracing_ctx=self.tracing_ctx, config=self.runnable_config
+        )
 
         actual_complete = result.get("is_complete", False)
 
