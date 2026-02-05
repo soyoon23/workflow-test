@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env file for Langfuse credentials and other secrets
+load_dotenv()
 
 from .litellm_eval import get_eval_model, load_project_config
 
@@ -202,18 +206,27 @@ def obs_registry():
 @pytest.fixture(autouse=True)
 def obs_test_trace(request, eval_config, obs_registry):
     """Create an observability callback handler for each test with proper context."""
+    import sys
+
     provider = obs_registry.resolve_provider(eval_config)
     if not provider:
+        print(f"[obs_test_trace] No provider found. Config keys: {list(eval_config.keys())}", file=sys.stderr)
         request.obs_callback = None
         request.obs_tracing_context = None
         yield None
         return
 
+    print(f"[obs_test_trace] Provider: {provider.name}", file=sys.stderr)
+
     if not provider.configure(eval_config):
+        langfuse_cfg = eval_config.get("langfuse", {})
+        print(f"[obs_test_trace] Configure failed. langfuse config: {langfuse_cfg}", file=sys.stderr)
         request.obs_callback = None
         request.obs_tracing_context = None
         yield None
         return
+
+    print("[obs_test_trace] Provider configured successfully", file=sys.stderr)
 
     test_name = request.node.name
     test_file = request.node.fspath.basename
@@ -227,6 +240,8 @@ def obs_test_trace(request, eval_config, obs_registry):
         },
     )
     tracing_ctx = provider.get_tracing_context()
+
+    print(f"[obs_test_trace] Callback created: {callback is not None}, ctx: {tracing_ctx is not None}", file=sys.stderr)
 
     request.obs_callback = callback
     request.obs_tracing_context = tracing_ctx

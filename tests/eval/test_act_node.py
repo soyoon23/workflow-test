@@ -22,7 +22,8 @@ class TestActNodeEval:
         self.eval_model = eval_model
         self.goldens = load_goldens("act_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        self.runnable_config = _make_runnable_config(getattr(request, "obs_callback", None))
+        # Use obs_test_trace directly - it yields the callback
+        self.runnable_config = _make_runnable_config(obs_test_trace)
 
     def _make_state_with_step(self, step_description: str, skill_name=None) -> dict:
         """Create a state with a single pending step for act_node to execute."""

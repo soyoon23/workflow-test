@@ -33,7 +33,8 @@ class TestE2EAgenticMetrics:
         self.threshold = eval_threshold
         self.goldens_data = load_goldens("e2e_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        self.obs_callback = getattr(request, "obs_callback", None)
+        # Use obs_test_trace directly - it yields the callback
+        self.obs_callback = obs_test_trace
 
     def test_task_completion(self):
         """Agent should complete the task successfully."""
@@ -98,7 +99,8 @@ class TestE2EAnswerQuality:
         self.threshold = eval_threshold
         self.goldens_data = load_goldens("e2e_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        self.obs_callback = getattr(request, "obs_callback", None)
+        # Use obs_test_trace directly - it yields the callback
+        self.obs_callback = obs_test_trace
 
     @pytest.mark.parametrize("golden_idx", range(6))
     def test_answer_relevancy(self, golden_idx):

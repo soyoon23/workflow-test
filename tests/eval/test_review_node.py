@@ -22,7 +22,8 @@ class TestReviewNodeEval:
         self.eval_model = eval_model
         self.goldens = load_goldens("review_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        self.runnable_config = _make_runnable_config(getattr(request, "obs_callback", None))
+        # Use obs_test_trace directly - it yields the callback
+        self.runnable_config = _make_runnable_config(obs_test_trace)
 
     def _make_state_with_completed_plan(self, golden: dict) -> dict:
         """Build a state with completed plan steps from golden metadata."""

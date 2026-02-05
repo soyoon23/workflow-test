@@ -24,7 +24,8 @@ class TestPlanNodeEval:
         self.plan_node = PlanNode(workflow_components)
         self.goldens = load_goldens("plan_goldens")
         self.tracing_ctx = getattr(request, "obs_tracing_context", None)
-        self.runnable_config = _make_runnable_config(getattr(request, "obs_callback", None))
+        # Use obs_test_trace directly - it yields the callback
+        self.runnable_config = _make_runnable_config(obs_test_trace)
 
     def _make_state(self, user_request: str, auto_select: bool = True) -> dict:
         return {
