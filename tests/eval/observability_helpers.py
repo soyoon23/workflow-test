@@ -5,52 +5,30 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Optional
 
-from deepeval import assert_test
+from deepeval.evaluate import evaluate
+from deepeval.evaluate.configs import AsyncConfig, DisplayConfig
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
+from deepeval.test_run import MetricData
 
 from src.observability.base import TracingContext
 
 
-def _metric_label(metric: BaseMetric) -> str:
-    return getattr(metric, "name", None) or getattr(metric, "__name__", metric.__class__.__name__)
-
-
-def _metric_success(metric: BaseMetric) -> Optional[bool]:
-    success_attr = getattr(metric, "success", None)
-    if isinstance(success_attr, bool):
-        return success_attr
-    is_successful = getattr(metric, "is_successful", None)
-    if callable(is_successful):
-        try:
-            return bool(is_successful())
-        except Exception:  # pragma: no cover - defensive
-            return None
-    return None
-
-
-def _extract_metric_details(metric: BaseMetric) -> dict[str, Any]:
-    """Extract all available evaluation details from a metric."""
+def _extract_metric_data_details(metric_data: MetricData) -> dict[str, Any]:
+    """Extract evaluation details from MetricData object returned by evaluate()."""
     details: dict[str, Any] = {
-        "name": _metric_label(metric),
-        "score": getattr(metric, "score", None),
-        "threshold": getattr(metric, "threshold", None),
-        "success": _metric_success(metric),
-        "reason": getattr(metric, "reason", None),
+        "name": metric_data.name,
+        "score": metric_data.score,
+        "threshold": metric_data.threshold,
+        "success": metric_data.success,
+        "reason": metric_data.reason,
+        "evaluation_model": metric_data.evaluation_model,
+        "error": metric_data.error,
     }
 
-    # GEval-specific fields
-    evaluation_steps = getattr(metric, "evaluation_steps", None)
-    if evaluation_steps:
-        details["evaluation_steps"] = evaluation_steps
-
-    evaluation_model = getattr(metric, "evaluation_model", None) or getattr(metric, "model", None)
-    if evaluation_model:
-        details["evaluation_model"] = str(evaluation_model)
-
-    criteria = getattr(metric, "criteria", None)
-    if criteria:
-        details["criteria"] = criteria
+    # Include verbose logs if available
+    if metric_data.verbose_logs:
+        details["verbose_logs"] = metric_data.verbose_logs
 
     return details
 
@@ -74,11 +52,9 @@ def _format_metric_output(details: dict[str, Any]) -> str:
     if reason:
         lines.append(f"\nReason:\n{reason}")
 
-    evaluation_steps = details.get("evaluation_steps")
-    if evaluation_steps:
-        lines.append("\nEvaluation Steps:")
-        for i, step in enumerate(evaluation_steps, 1):
-            lines.append(f"  {i}. {step}")
+    error = details.get("error")
+    if error:
+        lines.append(f"\nError:\n{error}")
 
     return "\n".join(lines)
 
@@ -91,7 +67,10 @@ def assert_metrics_with_tracing(
     span_name: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Call deepeval.assert_test while emitting per-metric Langfuse spans.
+    """Run DeepEval evaluation and emit per-metric Langfuse spans.
+
+    Uses evaluate() instead of assert_test() to get structured results
+    (score, reason, etc.) that can be recorded in Langfuse.
 
     For each metric, a dedicated span is created containing:
     - input: the test case input
@@ -101,27 +80,36 @@ def assert_metrics_with_tracing(
     A summary span groups all metric results for quick overview.
     """
 
-    try:
-        assert_test(test_case, list(metrics))
-    finally:
-        if not tracing_ctx:
-            return
+    for metric in metrics:
+        metric.measure(test_case=test_case)
+        
+        if tracing_ctx and metric:
+            details=_extract_metric_data_details(metric)
+            metric_span=tracing_ctx.create_span(
+                name=f"eval:{details['name']}",
+                metadata={"metric_type": type(metric).__name__}
+            )
 
-        test_input = getattr(test_case, "input", None)
+    
+    # Record to Langfuse if tracing context is available
+    if tracing_ctx and test_result.metrics_data:
         metric_summaries = []
 
         # Create a dedicated span per metric
-        for metric in metrics:
-            details = _extract_metric_details(metric)
+        for metric_data in test_result.metrics_data:
+            details = _extract_metric_data_details(metric_data)
             metric_summaries.append(details)
 
             span_meta = {**details}
+            # Include test case actual_output in metadata for full context
+            if test_actual_output:
+                span_meta["actual_output"] = test_actual_output
             if metadata:
                 span_meta.update(metadata)
 
             metric_span = tracing_ctx.create_span(
                 name=f"eval:{details['name']}",
-                metadata={"metric_type": metric.__class__.__name__},
+                metadata={"metric_type": type(metric_data).__name__},
             )
             tracing_ctx.end_span(
                 metric_span,
@@ -144,6 +132,9 @@ def assert_metrics_with_tracing(
             summary_lines.append(f"[{status}] {d['name']}: {score_str}")
 
         summary_meta: dict[str, Any] = {"metrics": metric_summaries}
+        # Include test case actual_output in summary metadata
+        if test_actual_output:
+            summary_meta["actual_output"] = test_actual_output
         if metadata:
             summary_meta.update(metadata)
 
@@ -153,3 +144,14 @@ def assert_metrics_with_tracing(
             output="\n".join(summary_lines),
             metadata=summary_meta,
         )
+
+    # Raise AssertionError if any metric failed (mimic assert_test behavior)
+    if not test_result.success:
+        failed_metrics = [
+            m for m in test_result.metrics_data if not m.success or m.error
+        ]
+        failed_str = ", ".join(
+            f"{m.name} (score: {m.score}, threshold: {m.threshold}, reason: {m.reason}, error: {m.error})"
+            for m in failed_metrics
+        )
+        raise AssertionError(f"Metrics failed: {failed_str}")
