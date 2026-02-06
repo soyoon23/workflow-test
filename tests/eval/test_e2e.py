@@ -21,7 +21,7 @@ from .traced_workflow import traced_workflow
 class TestE2EAgenticMetrics:
     """E2E evaluation using DeepEval's trace-based agentic metrics.
 
-    These tests use the @observe-traced workflow wrapper so that
+    These tests use the traced_workflow wrapper so that
     TaskCompletion, PlanQuality, PlanAdherence, and StepEfficiency
     metrics can analyse the full execution trace.
     """

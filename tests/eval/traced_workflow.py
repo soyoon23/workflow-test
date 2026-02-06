@@ -1,8 +1,8 @@
 """Traced workflow wrapper for DeepEval agentic metrics.
 
-Wraps the existing workflow with @observe decorators to create execution
-traces required by DeepEval's agentic metrics (TaskCompletion, PlanQuality,
-PlanAdherence, StepEfficiency).
+Creates execution traces required by DeepEval's agentic metrics
+(TaskCompletion, PlanQuality, PlanAdherence, StepEfficiency) by wrapping
+plan, act, and review nodes with tracing calls.
 
 This file is evaluation-only — production code in src/ is not modified.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from deepeval.test_case import ToolCall
-from deepeval.tracing import observe, update_current_span, update_current_trace
+from deepeval.tracing import update_current_span, update_current_trace
 
 if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
@@ -88,7 +88,6 @@ def _make_runnable_config(obs_callback=None) -> dict:
     return {}
 
 
-@observe(type="agent")
 def traced_workflow(user_request: str, config: dict, obs_callback=None) -> str:
     """Run the full Plan-Act-Review workflow with DeepEval tracing.
 
@@ -141,7 +140,6 @@ def traced_workflow(user_request: str, config: dict, obs_callback=None) -> str:
     return final_answer
 
 
-@observe(type="llm", name="plan")
 def _traced_plan(
     node,
     state: dict,
@@ -173,7 +171,6 @@ def _traced_plan(
     return result
 
 
-@observe(type="tool", name="act")
 def _traced_act(
     node,
     state: dict,
@@ -227,7 +224,6 @@ def _traced_act(
     return result, tools_called
 
 
-@observe(type="llm", name="review")
 def _traced_review(
     node,
     state: dict,
