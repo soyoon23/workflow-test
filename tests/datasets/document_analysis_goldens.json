@@ -1,0 +1,135 @@
+{
+  "dataset_name": "document_analysis_goldens",
+  "description": "문서 분석 시나리오 - PDF 읽기, 내용 추출, 요약",
+  "goldens": [
+    {
+      "input": "계약서.pdf를 읽고 주요 조항 3가지를 요약해줘",
+      "expected_output": "계약서 주요 조항 요약 (계약 당사자, 계약 기간, 주요 의무사항)",
+      "metadata": {
+        "category": "document_analysis",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "read_pdf": {
+            "response": {
+              "success": true,
+              "content": {
+                "title": "서비스 제공 계약서",
+                "pages": 12,
+                "text": "본 계약은 [회사명]과 [고객명] 간의 서비스 제공을 위한 계약입니다..."
+              }
+            }
+          },
+          "extract_clauses": {
+            "response": {
+              "success": true,
+              "clauses": [
+                {
+                  "clause_number": "1",
+                  "title": "계약 당사자",
+                  "content": "공급자: ABC 주식회사, 고객: XYZ 기업"
+                },
+                {
+                  "clause_number": "2",
+                  "title": "서비스 내용",
+                  "content": "클라우드 호스팅 서비스, 월간 99.9% 가용성 보장"
+                },
+                {
+                  "clause_number": "3",
+                  "title": "계약 기간",
+                  "content": "개시일: 2024년 1월 1일, 종료일: 2025년 12월 31일"
+                },
+                {
+                  "clause_number": "4",
+                  "title": "이용료",
+                  "content": "월 500,000원, 분기별 청구"
+                },
+                {
+                  "clause_number": "5",
+                  "title": "보안 의무",
+                  "content": "데이터 암호화, 정기적 백업, 접근 제어 실시"
+                }
+              ]
+            }
+          },
+          "summarize_contract": {
+            "response": {
+              "success": true,
+              "summary": {
+                "parties": "ABC 주식회사(공급자) - XYZ 기업(고객)",
+                "duration": "2024년 1월 1일 ~ 2025년 12월 31일 (2년)",
+                "service": "클라우드 호스팅 서비스 (99.9% 가용성 보장)",
+                "cost": "월 500,000원",
+                "key_obligations": [
+                  "공급자: 서비스 가용성 유지, 데이터 보안, 정기 백업",
+                  "고객: 이용료 적시 지급, 서비스 약관 준수"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "분기별 실적 보고서 3개월분을 읽고, 분기별 성과 비교표를 만들어줘",
+      "expected_output": "분기별 성과 비교표 (매출, 이윤, 주요 성과지표)",
+      "metadata": {
+        "category": "document_analysis",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "read_documents": {
+            "response": {
+              "success": true,
+              "documents": [
+                {
+                  "quarter": "Q1",
+                  "revenue": 45000000,
+                  "profit": 8100000,
+                  "growth": "3.5%",
+                  "key_metrics": ["신규 고객: 250", "이탈률: 2.3%", "순 추천고객: 62"]
+                },
+                {
+                  "quarter": "Q2",
+                  "revenue": 48600000,
+                  "profit": 9288000,
+                  "growth": "8%",
+                  "key_metrics": ["신규 고객: 310", "이탈률: 1.9%", "순 추천고객: 68"]
+                },
+                {
+                  "quarter": "Q3",
+                  "revenue": 52542000,
+                  "profit": 10758126,
+                  "growth": "8%",
+                  "key_metrics": ["신규 고객: 380", "이탈률: 1.5%", "순 추천고객: 74"]
+                }
+              ]
+            }
+          },
+          "create_comparison_table": {
+            "response": {
+              "success": true,
+              "comparison": {
+                "quarters": [
+                  {"quarter": "Q1", "revenue": "4.5억", "profit": "8.1천만", "growth": "3.5%", "new_customers": 250, "churn_rate": "2.3%"},
+                  {"quarter": "Q2", "revenue": "4.86억", "profit": "9.3천만", "growth": "8%", "new_customers": 310, "churn_rate": "1.9%"},
+                  {"quarter": "Q3", "revenue": "5.25억", "profit": "1.08억", "growth": "8%", "new_customers": 380, "churn_rate": "1.5%"}
+                ],
+                "insights": [
+                  "매출이 분기마다 8% 성장 중",
+                  "이윤율이 17-18%로 안정적",
+                  "신규 고객 확보 증가세",
+                  "이탈률 지속적 개선"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

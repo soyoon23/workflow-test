@@ -1,0 +1,60 @@
+{
+  "dataset_name": "policy_comparison_goldens",
+  "description": "정책 비교 시나리오 - 정보 수집, 비교표 작성",
+  "goldens": [
+    {
+      "input": "삼성화재, 현대해상, DB손해보험 자동차 보험을 비교해줘. 보장 항목과 보험료 중심으로.",
+      "expected_output": "자동차 보험 비교표 (보험료, 보장 범위, 특이사항)",
+      "metadata": {
+        "category": "policy_comparison",
+        "expected_skill": "research",
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4,
+        "complexity": "medium",
+        "mock_tools": {
+          "fetch_policies": {
+            "response": {
+              "success": true,
+              "policies": [
+                {
+                  "company": "삼성화재",
+                  "premium_monthly": 55000,
+                  "coverage": ["대인배상", "대물배상", "자차", "물건손해"],
+                  "deductible": 500000,
+                  "features": ["24시간 긴급출동", "직영정비소"]
+                },
+                {
+                  "company": "현대해상",
+                  "premium_monthly": 52000,
+                  "coverage": ["대인배상", "대물배상", "자차", "물건손해"],
+                  "deductible": 500000,
+                  "features": ["무료 차량점검", "렌트카 지원"]
+                },
+                {
+                  "company": "DB손해보험",
+                  "premium_monthly": 50000,
+                  "coverage": ["대인배상", "대물배상", "자차", "물건손해"],
+                  "deductible": 500000,
+                  "features": ["쌍둥이 할인", "온라인 할인"]
+                }
+              ]
+            }
+          },
+          "create_comparison": {
+            "response": {
+              "success": true,
+              "comparison_table": {
+                "companies": [
+                  {"name": "삼성화재", "premium": "55,000원", "coverage": "4대", "advantage": "직영정비소 많음", "disadvantage": "가격 높음"},
+                  {"name": "현대해상", "premium": "52,000원", "coverage": "4대", "advantage": "렌트카 지원", "disadvantage": "-"},
+                  {"name": "DB손해보험", "premium": "50,000원", "coverage": "4대", "advantage": "가격 저렴", "disadvantage": "마이너 보험사"}
+                ],
+                "recommendation": "가성비면 DB, 서비스면 삼성화재"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

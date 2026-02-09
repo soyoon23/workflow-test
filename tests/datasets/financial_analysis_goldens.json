@@ -1,0 +1,86 @@
+{
+  "dataset_name": "financial_analysis_goldens",
+  "description": "재무 분석 시나리오 - 지출 분석, 비용 절감 방안",
+  "goldens": [
+    {
+      "input": "지난 분기 비용 내역을 분석하고 절감 방안 3가지를 제안해줘",
+      "expected_output": "비용 절감 분석 보고서 (현황, 절감 방안, 기대 효과)",
+      "metadata": {
+        "category": "financial_analysis",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "load_expenses": {
+            "response": {
+              "success": true,
+              "data": {
+                "total_expenses": 250000000,
+                "breakdown": {
+                  "salary": 100000000,
+                  "office_rent": 30000000,
+                  "it_infrastructure": 25000000,
+                  "marketing": 40000000,
+                  "utilities": 15000000,
+                  "supplies": 20000000,
+                  "other": 20000000
+                }
+              }
+            }
+          },
+          "analyze_expenses": {
+            "response": {
+              "success": true,
+              "analysis": {
+                "largest_categories": [
+                  {"category": "급여", "amount": 100000000, "percentage": "40%"},
+                  {"category": "마케팅", "amount": 40000000, "percentage": "16%"},
+                  {"category": "임차료", "amount": 30000000, "percentage": "12%"}
+                ],
+                "inefficiency_areas": [
+                  "IT 인프라에 과잉 지출",
+                  "마케팅 채널 효율성 낮음",
+                  "공실(미사용 사무실) 존재"
+                ]
+              }
+            }
+          },
+          "generate_savings_plan": {
+            "response": {
+              "success": true,
+              "recommendations": [
+                {
+                  "measure": "클라우드 마이그레이션",
+                  "current_cost": 25000000,
+                  "projected_cost": 15000000,
+                  "savings": 10000000,
+                  "savings_rate": "40%",
+                  "timeline": "6개월"
+                },
+                {
+                  "measure": "마케팅 채널 최적화",
+                  "current_cost": 40000000,
+                  "projected_cost": 32000000,
+                  "savings": 8000000,
+                  "savings_rate": "20%",
+                  "timeline": "3개월"
+                },
+                {
+                  "measure": "공실 정리 및 재임차",
+                  "current_cost": 30000000,
+                  "projected_cost": 24000000,
+                  "savings": 6000000,
+                  "savings_rate": "20%",
+                  "timeline": "즉시"
+                }
+              ],
+              "total_potential_savings": 24000000,
+              "total_savings_rate": "9.6%"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

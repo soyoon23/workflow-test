@@ -1,0 +1,232 @@
+{
+  "dataset_name": "travel_planning_goldens",
+  "description": "여행 계획 수립 시나리오 - 웹 검색, 일정 작성, 정보 통합",
+  "goldens": [
+    {
+      "input": "4월 도쿄 3박4일 여행 일정 짜줘",
+      "expected_output": "도쿄 여행 일정 (관광지, 교통, 숙박 포함)",
+      "metadata": {
+        "category": "travel_planning",
+        "expected_skill": "research",
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 6,
+        "complexity": "medium",
+        "mock_tools": {
+          "web_search": {
+            "calls": [
+              {
+                "query_pattern": "도쿄|관광지|명소",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "센소지 절 (浅草寺)",
+                      "snippet": "도쿄에서 가장 오래된 절. 아사쿠사에 위치하며 일본의 전통문화를 체험할 수 있습니다.",
+                      "url": "https://example.com/senso-ji"
+                    },
+                    {
+                      "title": "시부야 스크램블",
+                      "snippet": "세계에서 가장 바쁜 횡단보도. 하루에 250만 명이 통행합니다.",
+                      "url": "https://example.com/shibuya"
+                    },
+                    {
+                      "title": "메이지 신사",
+                      "snippet": "메이지 천황을 모신 신사. 도쿄의 녹지 한 가운데 위치합니다.",
+                      "url": "https://example.com/meiji"
+                    }
+                  ]
+                }
+              },
+              {
+                "query_pattern": "도쿄|날씨|4월",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "4월 도쿄 날씨",
+                      "snippet": "평균 기온 15-25도. 벚꽃 시즌. 우산 준비 필요.",
+                      "url": "https://example.com/weather"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "create_itinerary": {
+            "response": {
+              "success": true,
+              "itinerary": {
+                "destination": "도쿄",
+                "duration_days": 3,
+                "days": [
+                  {
+                    "day": 1,
+                    "morning": "센소지 절 방문 및 전통 시장 산책",
+                    "afternoon": "스카이트리 전망대 관광",
+                    "evening": "아사쿠사 야경 감상"
+                  },
+                  {
+                    "day": 2,
+                    "morning": "메이지 신사 방문",
+                    "afternoon": "하라주쿠 쇼핑거리 탐방",
+                    "evening": "시부야 스크램블 경험"
+                  },
+                  {
+                    "day": 3,
+                    "morning": "오다이바 라이문시티 쇼핑",
+                    "afternoon": "도쿄 디즈니랜드 또는 자유 활동",
+                    "evening": "가이엔역 근처 라멘 맛보기"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "서울에서 가족 3명(부모, 아이 8살)이 5일간 즐길 수 있는 여행 계획을 만들어 줘",
+      "expected_output": "서울 가족 여행 일정 (아이 친화적 장소, 교통, 숙박)",
+      "metadata": {
+        "category": "travel_planning",
+        "expected_skill": "research",
+        "expected_step_count_min": 4,
+        "expected_step_count_max": 7,
+        "complexity": "medium-high",
+        "mock_tools": {
+          "web_search": {
+            "calls": [
+              {
+                "query_pattern": "서울|아이|가족|명소",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "서울어린이대공원",
+                      "snippet": "동물원, 식물원, 놀이기구가 있는 종로구 대공원",
+                      "url": "https://example.com/seoul-children"
+                    },
+                    {
+                      "title": "롯데월드",
+                      "snippet": "실내 테마파크. 모든 연령대가 즐길 수 있습니다.",
+                      "url": "https://example.com/lotte-world"
+                    },
+                    {
+                      "title": "서울숲",
+                      "snippet": "강동구의 대규모 공원. 피크닉과 산책에 좋습니다.",
+                      "url": "https://example.com/seoul-forest"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "create_itinerary": {
+            "response": {
+              "success": true,
+              "itinerary": {
+                "destination": "서울",
+                "duration_days": 5,
+                "target_audience": "가족(아이 8살)",
+                "days": [
+                  {
+                    "day": 1,
+                    "theme": "서울의 핵심 명소",
+                    "activities": ["경복궁 투어 (쉬운 코스)", "광화문 광장"]
+                  },
+                  {
+                    "day": 2,
+                    "theme": "아이 친화 명소",
+                    "activities": ["서울어린이대공원", "동물원 관람"]
+                  },
+                  {
+                    "day": 3,
+                    "theme": "실내 활동",
+                    "activities": ["롯데월드", "쇼핑 (명동)"]
+                  },
+                  {
+                    "day": 4,
+                    "theme": "자연 체험",
+                    "activities": ["서울숲 산책", "피크닉"]
+                  },
+                  {
+                    "day": 5,
+                    "theme": "시간 여유",
+                    "activities": ["인사동 도예 체험", "쇼핑 및 휴식"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "뉴욕 출장 3일 일정. 낮에는 미팅, 저녁에는 관광 가능. 추천해 줘.",
+      "expected_output": "뉴욕 3일 출장 일정 (비즈니스, 관광 균형)",
+      "metadata": {
+        "category": "travel_planning",
+        "expected_skill": "research",
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "web_search": {
+            "calls": [
+              {
+                "query_pattern": "뉴욕|관광|저녁|야경",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "타임스퀘어",
+                      "snippet": "뉴욕의 상징. 야간 조명이 아름답습니다.",
+                      "url": "https://example.com/times-square"
+                    },
+                    {
+                      "title": "브루클린 브릿지",
+                      "snippet": "저녁 산책 명소. 맨해튼 야경 감상에 최고.",
+                      "url": "https://example.com/brooklyn-bridge"
+                    },
+                    {
+                      "title": "빅앤리틀 뮤지컬",
+                      "snippet": "브로드웨이 뮤지컬. 저녁 공연 추천.",
+                      "url": "https://example.com/broadway"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "create_itinerary": {
+            "response": {
+              "success": true,
+              "itinerary": {
+                "destination": "뉴욕",
+                "duration_days": 3,
+                "schedule_type": "business_with_evening_tourism",
+                "days": [
+                  {
+                    "day": 1,
+                    "business": "오후 3시 미팅",
+                    "evening": "호텔 체크인, 타임스퀘어 야경 산책"
+                  },
+                  {
+                    "day": 2,
+                    "business": "오전 10시, 오후 2시 미팅",
+                    "evening": "브루클린 브릿지 야경 감상"
+                  },
+                  {
+                    "day": 3,
+                    "business": "오전 미팅 (선택)",
+                    "evening": "브로드웨이 뮤지컬 관람"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

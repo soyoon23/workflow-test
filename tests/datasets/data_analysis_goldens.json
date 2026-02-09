@@ -1,0 +1,194 @@
+{
+  "dataset_name": "data_analysis_goldens",
+  "description": "데이터 분석 시나리오 - CSV 로드, 분석, 시각화, 인사이트 도출",
+  "goldens": [
+    {
+      "input": "sales_2024.csv 파일을 분석해서 월별 매출 트렌드를 보고서로 만들어줘",
+      "expected_output": "월별 매출 트렌드 분석 보고서 (트렌드, 성장률, 인사이트)",
+      "metadata": {
+        "category": "data_analysis",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 6,
+        "complexity": "medium",
+        "mock_tools": {
+          "load_csv": {
+            "response": {
+              "success": true,
+              "data": {
+                "rows": 365,
+                "columns": ["date", "sales", "region", "product_category"],
+                "sample": [
+                  {"date": "2024-01-01", "sales": 125000, "region": "서울", "product_category": "전자제품"},
+                  {"date": "2024-01-02", "sales": 132000, "region": "부산", "product_category": "의류"},
+                  {"date": "2024-02-01", "sales": 165000, "region": "서울", "product_category": "전자제품"}
+                ]
+              }
+            }
+          },
+          "analyze_trends": {
+            "response": {
+              "success": true,
+              "analysis": {
+                "monthly_totals": {
+                  "2024-01": 3750000,
+                  "2024-02": 4230000,
+                  "2024-03": 4890000,
+                  "2024-04": 4560000,
+                  "2024-05": 5100000,
+                  "2024-06": 5800000,
+                  "2024-07": 6120000,
+                  "2024-08": 5950000,
+                  "2024-09": 6300000,
+                  "2024-10": 6750000,
+                  "2024-11": 7200000,
+                  "2024-12": 8100000
+                },
+                "growth_rate": "116%",
+                "highest_month": "2024-12",
+                "lowest_month": "2024-01",
+                "avg_monthly_growth": "8.7%"
+              }
+            }
+          },
+          "create_visualization": {
+            "response": {
+              "success": true,
+              "visualization": {
+                "type": "line_chart",
+                "title": "2024 월별 매출 추이",
+                "chart_url": "https://example.com/charts/sales_2024.png",
+                "description": "월별 매출이 꾸준히 증가 추세를 보임"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "지난 분기 고객 만족도 설문 데이터(customer_survey.csv)를 분석해서 개선 사항을 도출해줘",
+      "expected_output": "고객 만족도 분석 결과 (평가 점수, 주요 불만사항, 개선 권장사항)",
+      "metadata": {
+        "category": "data_analysis",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 6,
+        "complexity": "medium",
+        "mock_tools": {
+          "load_csv": {
+            "response": {
+              "success": true,
+              "data": {
+                "rows": 1523,
+                "columns": ["date", "overall_satisfaction", "product_quality", "delivery_speed", "customer_service", "feedback"],
+                "sample": [
+                  {"date": "2024-01-15", "overall_satisfaction": 4.2, "product_quality": 4.5, "delivery_speed": 3.8, "customer_service": 4.0}
+                ]
+              }
+            }
+          },
+          "analyze_survey": {
+            "response": {
+              "success": true,
+              "analysis": {
+                "overall_satisfaction_avg": 3.9,
+                "satisfaction_by_dimension": {
+                  "product_quality": 4.4,
+                  "delivery_speed": 3.5,
+                  "customer_service": 4.1,
+                  "pricing": 3.6
+                },
+                "top_complaints": [
+                  "배송 속도 (25%)",
+                  "가격이 높음 (18%)",
+                  "A/S 응답 시간 (12%)"
+                ],
+                "nps_score": 42
+              }
+            }
+          },
+          "generate_recommendations": {
+            "response": {
+              "success": true,
+              "recommendations": [
+                "배송 속도 개선: 물류 파트너 협력 강화 (기대 효과: NPS +15)",
+                "가격 정책 검토: 대량 구매 할인 정책 도입 (기대 효과: NPS +8)",
+                "고객 서비스 강화: 24/7 채팅 지원 추가 (기대 효과: NPS +10)"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "웹사이트 방문자 행동 데이터(web_analytics.csv)를 분석해서 사용자 이탈 원인을 찾아줘",
+      "expected_output": "이탈 원인 분석 보고서 (이탈률, 주요 원인, 개선 방안)",
+      "metadata": {
+        "category": "data_analysis",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 6,
+        "complexity": "medium-high",
+        "mock_tools": {
+          "load_csv": {
+            "response": {
+              "success": true,
+              "data": {
+                "rows": 50000,
+                "columns": ["session_id", "landing_page", "pages_viewed", "time_on_site", "converted", "bounce_rate"],
+                "sample": [
+                  {"session_id": "sess_1", "landing_page": "/home", "pages_viewed": 3, "time_on_site": 245, "converted": true},
+                  {"session_id": "sess_2", "landing_page": "/products", "pages_viewed": 1, "time_on_site": 15, "converted": false}
+                ]
+              }
+            }
+          },
+          "analyze_funnel": {
+            "response": {
+              "success": true,
+              "funnel_analysis": {
+                "total_visitors": 50000,
+                "homepage_visitors": 45000,
+                "product_page_visitors": 28000,
+                "checkout_visitors": 8500,
+                "conversions": 5200,
+                "conversion_rate": "10.4%",
+                "bounce_rate_by_page": {
+                  "/": "8%",
+                  "/products": "42%",
+                  "/checkout": "15%",
+                  "/pricing": "55%"
+                }
+              }
+            }
+          },
+          "identify_pain_points": {
+            "response": {
+              "success": true,
+              "pain_points": [
+                {
+                  "page": "/pricing",
+                  "bounce_rate": "55%",
+                  "reason": "가격 정보 불명확",
+                  "recommendation": "가격 비교 테이블 추가"
+                },
+                {
+                  "page": "/products",
+                  "bounce_rate": "42%",
+                  "reason": "필터링 옵션 부족",
+                  "recommendation": "고급 검색 필터 개선"
+                },
+                {
+                  "page": "/checkout",
+                  "bounce_rate": "15%",
+                  "reason": "복잡한 결제 과정",
+                  "recommendation": "결제 프로세스 단순화"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

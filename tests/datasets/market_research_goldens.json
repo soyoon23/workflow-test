@@ -1,0 +1,252 @@
+{
+  "dataset_name": "market_research_goldens",
+  "description": "시장 조사 시나리오 - 웹 검색, 경쟁사 분석, 비교표 생성",
+  "goldens": [
+    {
+      "input": "AI 챗봇 시장의 주요 경쟁사 3개를 비교 분석해줘. 가격, 기능, 시장점유율을 중심으로.",
+      "expected_output": "AI 챗봇 경쟁사 비교 분석 (ChatGPT, Claude, Gemini 등)",
+      "metadata": {
+        "category": "market_research",
+        "expected_skill": "research",
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "web_search": {
+            "calls": [
+              {
+                "query_pattern": "AI 챗봇|ChatGPT|Claude|Gemini|가격|기능",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "ChatGPT 가격 정책",
+                      "snippet": "무료: GPT-3.5. Pro: $20/월 (GPT-4). Enterprise: 맞춤형 요금",
+                      "url": "https://example.com/chatgpt-pricing"
+                    },
+                    {
+                      "title": "Claude API 가격",
+                      "snippet": "Haiku: $0.80/M 토큰. Sonnet: $3/M. Opus: $15/M. 가장 저렴한 고성능 모델",
+                      "url": "https://example.com/claude-pricing"
+                    },
+                    {
+                      "title": "Google Gemini 가격",
+                      "snippet": "Google One: $20/월. API: 경쟁력 있는 가격",
+                      "url": "https://example.com/gemini-pricing"
+                    },
+                    {
+                      "title": "AI 챗봇 시장점유율 2024",
+                      "snippet": "ChatGPT: 70%, Claude: 15%, Gemini: 10%, 기타: 5%",
+                      "url": "https://example.com/market-share"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "create_comparison_table": {
+            "response": {
+              "success": true,
+              "comparison": {
+                "competitors": [
+                  {
+                    "name": "ChatGPT",
+                    "pricing": "$0-$20/월",
+                    "key_features": ["GPT-4 모델", "멀티모달", "플러그인", "웹 브라우징"],
+                    "market_share": "70%",
+                    "strengths": ["가장 유명", "풍부한 에코시스템"],
+                    "weaknesses": ["상대적으로 비쌈", "응답 속도"]
+                  },
+                  {
+                    "name": "Claude",
+                    "pricing": "$0-$20/월",
+                    "key_features": ["길이 문맥 (100K)", "강력한 코드 생성", "문서 분석"],
+                    "market_share": "15%",
+                    "strengths": ["최고 성능", "안전성", "한글 우수"],
+                    "weaknesses": ["덜 알려짐", "플러그인 부족"]
+                  },
+                  {
+                    "name": "Gemini",
+                    "pricing": "$0-$20/월",
+                    "key_features": ["멀티모달", "Google 통합", "실시간 정보"],
+                    "market_share": "10%",
+                    "strengths": ["Google 생태계", 실시간 정보"],
+                    "weaknesses": ["신뢰성 문제", "성능"]
+                  }
+                ]
+              }
+            }
+          },
+          "generate_insights": {
+            "response": {
+              "success": true,
+              "insights": [
+                "시장은 ChatGPT가 압도적으로 주도하고 있음",
+                "Claude는 엔터프라이즈 고객들 사이에서 인기 상승 중",
+                "가격은 큰 차이가 없지만, 성능과 특화 기능이 선택 기준",
+                "사용자 경험과 신뢰성이 핵심 경쟁 요소"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "한국 식품 배달앱(배달의민족, 우버이츠, 쿠팡이츠) 시장 분석. 각각의 강점과 약점을 정리해줘.",
+      "expected_output": "한국 식품 배달앱 시장 분석 (시장점유율, 강점, 약점, 전략)",
+      "metadata": {
+        "category": "market_research",
+        "expected_skill": "research",
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "web_search": {
+            "calls": [
+              {
+                "query_pattern": "배달|한국|시장점유율|배달의민족|우버이츠|쿠팡",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "2024 한국 식품 배달 시장",
+                      "snippet": "배달의민족 48.5%, 쿠팡이츠 31.2%, 우버이츠 15.8%, 기타 4.5%",
+                      "url": "https://example.com/delivery-market"
+                    },
+                    {
+                      "title": "배달의민족 분석",
+                      "snippet": "강점: 압도적 시장점유율, 가맹점 수 가장 많음. 약점: 수수료 논란",
+                      "url": "https://example.com/baedal-analysis"
+                    },
+                    {
+                      "title": "쿠팡이츠 전략",
+                      "snippet": "강점: 빠른 배송, 쿠팡멤버십 연계. 약점: 제한된 지역, 높은 가격",
+                      "url": "https://example.com/coupang-eats"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "create_comparison_table": {
+            "response": {
+              "success": true,
+              "comparison": {
+                "apps": [
+                  {
+                    "name": "배달의민족",
+                    "market_share": "48.5%",
+                    "restaurants": "350,000+",
+                    "delivery_time": "30-40분",
+                    "commission_rate": "5-15%",
+                    "strengths": ["압도적 점유율", "가맹점 수 많음", "할인 이벤트", "사용자 기반"],
+                    "weaknesses": ["높은 수수료", "기술 개선 느림"]
+                  },
+                  {
+                    "name": "쿠팡이츠",
+                    "market_share": "31.2%",
+                    "restaurants": "85,000+",
+                    "delivery_time": "15-20분",
+                    "commission_rate": "3-8%",
+                    "strengths": ["빠른 배송", "쿠팡멤버십 연계", "낮은 수수료"],
+                    "weaknesses": ["서비스 지역 제한", "식당 선택 제한"]
+                  },
+                  {
+                    "name": "우버이츠",
+                    "market_share": "15.8%",
+                    "restaurants": "45,000+",
+                    "delivery_time": "35-50분",
+                    "commission_rate": "15-25%",
+                    "strengths": ["글로벌 브랜드", "기술 우수"],
+                    "weaknesses": ["높은 수수료", "낮은 점유율"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "클라우드 스토리지 서비스(Google Drive, OneDrive, Dropbox, iCloud) 비교해줘. 가격, 용량, 호환성 중심으로.",
+      "expected_output": "클라우드 스토리지 서비스 비교 분석",
+      "metadata": {
+        "category": "market_research",
+        "expected_skill": "research",
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium",
+        "mock_tools": {
+          "web_search": {
+            "calls": [
+              {
+                "query_pattern": "클라우드|스토리지|Google Drive|OneDrive|Dropbox|가격|용량",
+                "response": {
+                  "success": true,
+                  "results": [
+                    {
+                      "title": "Google Drive 가격",
+                      "snippet": "무료: 15GB. Google One: 100GB $2/월, 2TB $10/월",
+                      "url": "https://example.com/google-drive"
+                    },
+                    {
+                      "title": "OneDrive 가격",
+                      "snippet": "무료: 5GB. Microsoft 365: 1TB $7/월",
+                      "url": "https://example.com/onedrive"
+                    },
+                    {
+                      "title": "Dropbox 가격",
+                      "snippet": "무료: 2GB. Pro: 2TB $12/월. Business: 3TB+",
+                      "url": "https://example.com/dropbox"
+                    },
+                    {
+                      "title": "iCloud 가격",
+                      "snippet": "무료: 5GB. iCloud+: 50GB $1/월, 200GB $3/월, 2TB $10/월",
+                      "url": "https://example.com/icloud"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "create_comparison_table": {
+            "response": {
+              "success": true,
+              "comparison": {
+                "services": [
+                  {
+                    "name": "Google Drive",
+                    "free_storage": "15GB",
+                    "paid_plans": "100GB ($2), 2TB ($10)",
+                    "compatibility": "모든 플랫폼",
+                    "integration": "Google 워크스페이스",
+                    "strengths": ["넉넉한 무료 용량", "Google 서비스 통합"],
+                    "weaknesses": ["동기화 느림"]
+                  },
+                  {
+                    "name": "OneDrive",
+                    "free_storage": "5GB",
+                    "paid_plans": "1TB (Microsoft 365 $7)",
+                    "compatibility": "Windows 최적화",
+                    "integration": "Office 365",
+                    "strengths": ["Office 통합", "가성비"],
+                    "weaknesses": ["적은 무료 용량"]
+                  },
+                  {
+                    "name": "Dropbox",
+                    "free_storage": "2GB",
+                    "paid_plans": "2TB ($12), 무제한",
+                    "compatibility": "모든 플랫폼",
+                    "integration": "써드파티 앱 많음",
+                    "strengths": ["신뢰성", "호환성"],
+                    "weaknesses": ["상대적으로 비쌈"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

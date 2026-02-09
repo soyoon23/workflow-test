@@ -1,0 +1,48 @@
+{
+  "dataset_name": "educational_content_goldens",
+  "description": "교육 자료 생성 시나리오 - 내용 구성, 시각 자료, 상호작용 설계",
+  "goldens": [
+    {
+      "input": "Transformer 아키텍처를 설명하는 인터랙티브 웹페이지 구조를 설계해줘",
+      "expected_output": "웹페이지 구조 설계 (섹션 구성, 시각화 계획, 상호작용 요소)",
+      "metadata": {
+        "category": "educational_content",
+        "expected_skill": "research",
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4,
+        "complexity": "medium",
+        "mock_tools": {
+          "research_topic": {
+            "response": {
+              "success": true,
+              "content": {
+                "topic": "Transformer Architecture",
+                "key_concepts": ["Self-Attention", "Multi-Head Attention", "Feed Forward", "Position Encoding"]
+              }
+            }
+          },
+          "design_page": {
+            "response": {
+              "success": true,
+              "design": {
+                "sections": [
+                  {"title": "소개", "content": "Transformer란 무엇인가?"},
+                  {"title": "Self-Attention", "content": "동작 원리 설명", "visualization": "다이어그램"},
+                  {"title": "Multi-Head Attention", "content": "병렬 처리", "visualization": "애니메이션"},
+                  {"title": "구조 전체도", "content": "인터랙티브 다이어그램"},
+                  {"title": "실제 활용", "content": "사례 소개"}
+                ],
+                "interactive_elements": [
+                  "단계별 학습 가이드",
+                  "수식 설명 팝업",
+                  "시각화 애니메이션",
+                  "퀴즈"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

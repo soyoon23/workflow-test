@@ -1,0 +1,73 @@
+{
+  "dataset_name": "content_creation_goldens",
+  "description": "콘텐츠 생성 시나리오 - 기획, 작성, 편집",
+  "goldens": [
+    {
+      "input": "파이썬 입문자를 위한 5분짜리 튜토리얼 스크립트를 작성해줘. '반복문(for)' 주제로.",
+      "expected_output": "파이썬 for문 튜토리얼 스크립트 (소개, 예제, 요약)",
+      "metadata": {
+        "category": "content_creation",
+        "expected_skill": null,
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4,
+        "complexity": "medium",
+        "mock_tools": {
+          "research_topic": {
+            "response": {
+              "success": true,
+              "content": {
+                "topic": "Python for loop",
+                "key_points": ["기본 문법", "range() 함수", "실제 예제", "자주 하는 실수"]
+              }
+            }
+          },
+          "write_script": {
+            "response": {
+              "success": true,
+              "script": "파이썬 for문 완벽 가이드\n\n[인트로]\n안녕하세요. 오늘은 파이썬의 반복문 for에 대해 배워보겠습니다.\n\n[기본 개념]\nfor문은 정해진 횟수만큼 코드를 반복실행할 때 사용합니다.\n\n[예제1]\nfor i in range(5):\n    print(i)\n\n[예제2]\nfruits = ['사과', '바나나', '딸기']\nfor fruit in fruits:\n    print(fruit)\n\n[정리]\nfor문을 사용하면 반복 작업을 효율적으로 처리할 수 있습니다."
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "회사 뉴스레터 한 호를 기획해줘. '2024년 상반기 회사 성과 공유' 주제로.",
+      "expected_output": "뉴스레터 기획안 (제목, 섹션 구성, 내용 개요)",
+      "metadata": {
+        "category": "content_creation",
+        "expected_skill": null,
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4,
+        "complexity": "medium",
+        "mock_tools": {
+          "plan_newsletter": {
+            "response": {
+              "success": true,
+              "plan": {
+                "title": "2024 상반기 성과 공유 - 함께 이루는 성공",
+                "sections": [
+                  {
+                    "section": "인사말",
+                    "content": "CEO의 상반기 메시지"
+                  },
+                  {
+                    "section": "핵심 성과",
+                    "content": "매출 20% 성장, 신입사원 50명 채용"
+                  },
+                  {
+                    "section": "직원 스포트라이트",
+                    "content": "월간 우수직원 소개"
+                  },
+                  {
+                    "section": "앞으로의 계획",
+                    "content": "하반기 목표 및 전략"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

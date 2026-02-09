@@ -1,0 +1,74 @@
+{
+  "dataset_name": "scheduling_goldens",
+  "description": "일정 관리 시나리오 - 일정 확인, 조율, 예약",
+  "goldens": [
+    {
+      "input": "팀 3명(A, B, C)이 모두 참석 가능한 다음 주 회의 시간을 찾아줘",
+      "expected_output": "최적의 회의 시간 (예: 수요일 오후 2시)",
+      "metadata": {
+        "category": "scheduling",
+        "expected_skill": null,
+        "expected_step_count_min": 2,
+        "expected_step_count_max": 4,
+        "complexity": "medium",
+        "mock_tools": {
+          "check_calendars": {
+            "response": {
+              "success": true,
+              "availability": {
+                "A": ["월 10-12시", "화 14-16시", "수 13-17시", "목 09-12시"],
+                "B": ["월 14-17시", "화 10-16시", "수 13-17시", "금 09-12시"],
+                "C": ["화 14-17시", "수 13-17시", "목 10-12시", "금 14-17시"]
+              }
+            }
+          },
+          "find_common_slots": {
+            "response": {
+              "success": true,
+              "common_slots": [
+                {"time": "수요일 13시-14시", "duration": "1시간"},
+                {"time": "수요일 14시-15시", "duration": "1시간"},
+                {"time": "수요일 15시-16시", "duration": "1시간"}
+              ],
+              "recommended": "수요일 14시-15시"
+            }
+          }
+        }
+      }
+    },
+    {
+      "input": "신입사원 5명의 면접 일정을 4개의 면접실에 배정해줘. 면접관 일정도 고려해서.",
+      "expected_output": "면접 일정표 (날짜, 시간, 면접실, 면접관)",
+      "metadata": {
+        "category": "scheduling",
+        "expected_skill": null,
+        "expected_step_count_min": 3,
+        "expected_step_count_max": 5,
+        "complexity": "medium-high",
+        "mock_tools": {
+          "get_interview_requirements": {
+            "response": {
+              "success": true,
+              "candidates": 5,
+              "interview_rooms": 4,
+              "interviewers": ["면접관A", "면접관B", "면접관C"],
+              "duration_per_interview": 30
+            }
+          },
+          "create_schedule": {
+            "response": {
+              "success": true,
+              "schedule": [
+                {"date": "2024-02-20", "time": "09:00", "room": "1", "candidate": "A", "interviewer": "면접관A"},
+                {"date": "2024-02-20", "time": "09:00", "room": "2", "candidate": "B", "interviewer": "면접관B"},
+                {"date": "2024-02-20", "time": "10:00", "room": "1", "candidate": "C", "interviewer": "면접관C"},
+                {"date": "2024-02-20", "time": "10:00", "room": "2", "candidate": "D", "interviewer": "면접관A"},
+                {"date": "2024-02-20", "time": "11:00", "room": "1", "candidate": "E", "interviewer": "면접관B"}
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

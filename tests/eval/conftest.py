@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from .litellm_eval import get_eval_model, load_project_config
+from .mocks import MockToolRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +136,7 @@ def run_workflow_for_eval(
     user_request: str,
     config: dict,
     obs_callback=None,
+    conversation_history=None,
 ) -> dict:
     """Run the full workflow and return the final state for evaluation.
 
@@ -142,7 +144,10 @@ def run_workflow_for_eval(
     and invokes run_workflow().
 
     Args:
+        user_request: User input request.
+        config: Configuration dict.
         obs_callback: Optional observability callback handler for tracing.
+        conversation_history: Optional conversation history for multi-turn.
     """
     from src.llm.client import LLMClient
     from src.prompts.registry import PromptRegistry
@@ -181,6 +186,75 @@ def run_workflow_for_eval(
         components=components,
         auto_select_skill=(skill is None),
         callbacks=callbacks,
+        conversation_history=conversation_history,
+    )
+
+    # Flush observability traces
+    if obs_callback and hasattr(obs_callback, "flush"):
+        obs_callback.flush()
+
+    return final_state
+
+
+def run_workflow_with_mocks(
+    user_request: str,
+    config: dict,
+    mock_tool_registry: MockToolRegistry,
+    obs_callback=None,
+    conversation_history=None,
+) -> dict:
+    """Run the full workflow with mocked tools for testing.
+
+    This wrapper is similar to run_workflow_for_eval but uses a MockToolRegistry
+    instead of a real ToolRegistry, allowing tests to inject predefined tool responses.
+
+    Args:
+        user_request: User input request.
+        config: Configuration dict.
+        mock_tool_registry: MockToolRegistry with registered mock responses.
+        obs_callback: Optional observability callback handler for tracing.
+        conversation_history: Optional conversation history for multi-turn.
+
+    Returns:
+        Final workflow state.
+    """
+    from src.llm.client import LLMClient
+    from src.prompts.registry import PromptRegistry
+    from src.skills.registry import SkillRegistry
+    from src.workflow.components import WorkflowComponents
+    from src.workflow.graph import run_workflow
+
+    llm_cfg = config["llm"]
+    components = WorkflowComponents(
+        llm=LLMClient(
+            base_url=llm_cfg["base_url"],
+            model=llm_cfg["model"],
+            api_key=llm_cfg["api_key"],
+            temperature=llm_cfg.get("temperature", 0.7),
+            max_tokens=llm_cfg.get("max_tokens", 4096),
+        ),
+        prompts=PromptRegistry(
+            templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
+        ),
+        tools=mock_tool_registry,  # Use mock registry instead of real one
+        skills=SkillRegistry(
+            templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")
+        ),
+    )
+
+    # Detect skill trigger
+    skill, actual_request = components.skills.parse_input(user_request)
+    components.initial_skill = skill
+
+    # Prepare callbacks
+    callbacks = [obs_callback] if obs_callback else None
+
+    final_state = run_workflow(
+        user_request=actual_request,
+        components=components,
+        auto_select_skill=(skill is None),
+        callbacks=callbacks,
+        conversation_history=conversation_history,
     )
 
     # Flush observability traces
@@ -236,3 +310,25 @@ def obs_test_trace(request, eval_config, obs_registry):
     yield (callback, tracing_ctx)
 
     provider.flush()
+
+
+# ---------------------------------------------------------------------------
+# Mock Tool Registry Fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_tool_registry():
+    """Create a MockToolRegistry for test use.
+
+    Returns a MockToolRegistry instance that can be injected into WorkflowComponents
+    to simulate tool execution without calling real APIs.
+
+    Example:
+        >>> def test_with_mocks(mock_tool_registry):
+        ...     mock_tool_registry.register_mock("web_search", [
+        ...         {"results": [{"title": "test", "url": "..."}]}
+        ...     ])
+        ...     # Use in workflow
+    """
+    return MockToolRegistry()
