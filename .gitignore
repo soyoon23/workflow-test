@@ -27,4 +27,6 @@ config.yaml
 # Claude
 .claude/
 
+AGENTS.md
+GEMINI.md
 nul
