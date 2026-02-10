@@ -21,7 +21,7 @@ def load_project_config() -> Dict[str, Any]:
 
 
 def _resolve_eval_api_key(eval_cfg: Dict[str, Any]) -> str:
-    api_key = os.environ.get("DEEPEVAL_API_KEY", eval_cfg.get("api_key", ""))
+    api_key = os.environ.get("LLM_API_KEY", eval_cfg.get("api_key", ""))
     if api_key.startswith("${") and api_key.endswith("}"):
         env_name = api_key[2:-1]
         api_key = os.environ.get(env_name, "")

@@ -69,8 +69,7 @@ Plan-Act-Review state machine defined in `src/workflow/graph.py`. Nodes satisfy 
 ## Testing
 
 - Unit tests (`tests/unit/`) do not require external LLMs and have no pytest markers — use directory-based filtering.
-- Eval tests (`tests/eval/`) require LiteLLM + DeepEval and are decorated with `@pytest.mark.eval`. Export `DEEPEVAL_API_KEY` via `.env`.
-- CI (`.github/workflows/test.yml`): runs Ruff lint+format check, then `pytest tests/unit/ -v`. Eval suite runs only on `main` push or manual dispatch.
+- Eval tests (`tests/eval/`) require LiteLLM + DeepEval and are decorated with `@pytest.mark.eval`. Export `LLM_API_KEY` via `.env`.
 - Golden datasets live in `tests/datasets/*.json`; keep them deterministic and human-readable. Multi-step goldens use `metadata.is_multistep: true` with a `steps` array.
 - Fixtures: `tests/conftest.py` (shared), `tests/eval/conftest.py` (eval-scoped). Keep them deterministic.
 - Prefer asserting on structured data (plans, tool outputs) over raw strings.
