@@ -176,8 +176,7 @@ TOOL_DEFINITIONS = {
                     "expression": {
                         "type": "string",
                         "description": (
-                            "The mathematical expression to evaluate, "
-                            "e.g., '2 + 2' or 'sqrt(16)'"
+                            "The mathematical expression to evaluate, e.g., '2 + 2' or 'sqrt(16)'"
                         ),
                     }
                 },
