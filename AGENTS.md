@@ -40,7 +40,7 @@ Keep this file handy before editing code or running commands.
 - To run a single test function: `uv run pytest tests/unit/test_routing.py::test_should_continue_plan -vv`.
 - Pattern-based filtering works too: `uv run pytest -k "plan_node and not eval"`.
 - CI workflow (`.github/workflows/test.yml`) installs uv, syncs dev deps, runs Ruff lint+format check, then executes `uv run pytest tests/unit/ -v`; evaluation suite only runs on main or manual dispatch.
-- Golden datasets for plan/act/review/e2e validations live in `tests/datasets/*.json`; keep them deterministic.
+- Golden datasets for plan/act/review/e2e validations live in `tests/datasets/*.json`; keep them deterministic. Multi-step goldens use `metadata.is_multistep: true` with a `steps` array containing per-step description, status, result, and expected_tools.
 
 ## Observability, LLM, and Streaming Stack
 - `src/llm/client.py` wraps `langchain-openai.ChatOpenAI` and automatically normalizes Base URLs to `/v1`; always pass `config` through to keep tracing.
@@ -53,7 +53,7 @@ Keep this file handy before editing code or running commands.
 
 ## Workflow Architecture Cliff Notes
 - Planner builds a list of `PlanStep` dictionaries; `NodeMixin._build_skill_selection_block()` only shows up when auto-select is active and no skill is chosen.
-- Actor marks steps `in_progress`, streams tokens via `StreamCallback.token`, executes tools, and writes `result` plus `status = "completed"` back onto the plan.
+- Actor marks steps `in_progress`, builds a HumanMessage that includes the original `user_request`, prior completed step results (`_build_prior_context`), and the current step instruction. It streams tokens via `StreamCallback.token` and supports multi-round tool call loops (up to `MAX_TOOL_ROUNDS=3`); on the final round tools are omitted to force a text response. LLM/tool execution is wrapped in try/except — failures set `status="failed"` and propagate an `error` field so `should_continue` terminates the run.
 - Reviewer ingests `_format_plan_for_review()` summaries, returns `is_complete`, `final_answer`, `error`, and `key_facts`; those `key_facts` feed the next turn's actor/reviewer context.
 - `ConversationHistoryManager` maintains sliding windows (full detail for the latest turn, summaries for older ones); `ConversationContextBuilder` formats role-specific history blocks.
 - Skills come from YAML templates under `src/skills/templates`; each skill can constrain tools and add prompt context.

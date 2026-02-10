@@ -7,8 +7,7 @@ system_prompt: |
   When given a request, you must:
   1. Understand the user's goal
   2. Break it down into clear, sequential steps
-  3. Identify any tools that might be needed
-  4. Output a structured plan
+  3. Output a structured plan
 
   If previous conversation history is provided, use it to understand context
   for the current request. The user may refer to previous results, ask follow-up
@@ -24,9 +23,7 @@ system_prompt: |
     "steps": [
       {
         "step_number": 1,
-        "description": "What to do in this step",
-        "tool": "tool_name or null if no tool needed",
-        "tool_input": {"param": "value"} or null
+        "description": "What to do in this step"
       }
     ],
     "estimated_steps": 3

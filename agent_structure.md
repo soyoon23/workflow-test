@@ -16,9 +16,9 @@
 - **프롬프트 구성**: `_get_prompt("actor")`가 기본 액터 프롬프트에 히스토리와 스킬 지침을 병합한다. 액터는 `ConversationContextBuilder` 기준 최소한의 정보(Review 노드가 추출한 `key_facts` 또는 답변 요약)만 받는다.
 - **툴 접근**: `_get_tools`가 현재 활성 스킬이 허용한 툴만 노출한다. 항상 `use_skill` 함수 툴이 추가되어 실행 중 스킬 전환이 가능하다. 스킬이 없으면 전체 툴 레지스트리 정의를 쓴다.
 - **실행 흐름**:
-  1. 현재 스텝 상태를 `in_progress`로 마킹하고 시스템/휴먼 메시지를 구성한다.
-  2. LLM 호출(스트리밍 가능). 응답이 툴 호출을 포함하면 각 툴을 실행(`ToolRegistry.execute_tool_call`). `use_skill` 호출 시 `active_skill_name`이 업데이트된다.
-  3. 툴 호출 후 최종 답변을 받으면 스텝 상태를 `completed`로, 결과 문자열을 저장한다. 메시지 히스토리를 상태에 병합하고 스텝 인덱스를 증가시킨다.
+  1. 현재 스텝 상태를 `in_progress`로 마킹한다. `_build_prior_context`로 이전 완료 스텝 결과를 수집하고, 원본 `user_request`와 함께 HumanMessage를 구성한다.
+  2. `_call_llm` 헬퍼를 통해 LLM 호출(스트리밍/비스트리밍 분기를 내부 처리). 응답이 툴 호출을 포함하면 multi-round 루프(`MAX_TOOL_ROUNDS=3`)를 돌며 `execute_tool_calls`로 툴을 실행한다. 마지막 라운드에서는 `tools=None`으로 호출해 텍스트 응답을 강제한다. `use_skill` 호출 시 `active_skill_name`이 업데이트된다.
+  3. 전체 LLM/툴 실행이 try/except로 감싸져 있다. 성공 시 스텝 상태를 `completed`로, 결과 문자열을 저장한다. 실패 시 `status="failed"`, 에러 메시지를 기록하고 `callback.error()`를 호출한 뒤 `error` 필드를 반환해 `should_continue`가 워크플로를 종료한다.
 
 ### Review 노드 (reviewer)
 

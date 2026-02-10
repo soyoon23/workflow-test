@@ -36,6 +36,50 @@
         "expected_tools": ["calculator"],
         "expected_tool_args": {"expression": "pi * 5**2"}
       }
+    },
+    {
+      "input": "2의 10제곱을 계산하고 그 결과의 제곱근을 구해줘",
+      "expected_output": "32.0",
+      "metadata": {
+        "is_multistep": true,
+        "steps": [
+          {
+            "step_number": 1,
+            "description": "calculator를 사용하여 2^10을 계산한다",
+            "status": "completed",
+            "result": "2^10 = 1024"
+          },
+          {
+            "step_number": 2,
+            "description": "Step 1의 계산 결과를 사용하여 제곱근을 계산한다",
+            "status": "pending",
+            "result": null,
+            "expected_tools": ["calculator"]
+          }
+        ]
+      }
+    },
+    {
+      "input": "100의 제곱근을 구하고 그 결과에 3을 곱해줘",
+      "expected_output": "30.0",
+      "metadata": {
+        "is_multistep": true,
+        "steps": [
+          {
+            "step_number": 1,
+            "description": "calculator를 사용하여 sqrt(100)을 계산한다",
+            "status": "completed",
+            "result": "sqrt(100) = 10.0"
+          },
+          {
+            "step_number": 2,
+            "description": "Step 1의 결과에 3을 곱한다",
+            "status": "pending",
+            "result": null,
+            "expected_tools": ["calculator"]
+          }
+        ]
+      }
     }
   ]
 }
