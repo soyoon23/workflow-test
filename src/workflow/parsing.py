@@ -41,9 +41,7 @@ def extract_json_payload(content: str) -> Optional[dict[str, Any]]:
         return None
 
 
-def parse_plan(
-    content: str, skill_registry: SkillRegistry
-) -> tuple[list[PlanStep], Optional[str]]:
+def parse_plan(content: str, skill_registry: SkillRegistry) -> tuple[list[PlanStep], Optional[str]]:
     """Parse plan from LLM response.
 
     Returns:

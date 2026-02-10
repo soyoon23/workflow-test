@@ -1,5 +1,9 @@
 """Unit tests for ToolRegistry."""
 
+from unittest.mock import MagicMock, patch
+
+import httpx
+
 from src.tools.registry import ToolRegistry
 
 
@@ -26,15 +30,69 @@ class TestToolRegistry:
         assert result["success"] is False
         assert "error" in result
 
-    def test_web_search_execution(self, tool_registry):
+    @patch("src.tools.base.httpx.Client")
+    def test_web_search_execution(self, mock_client_cls, tool_registry):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"title": "Result 1", "content": "Snippet 1", "url": "https://example.com/1"},
+                {"title": "Result 2", "content": "Snippet 2", "url": "https://example.com/2"},
+                {"title": "Result 3", "content": "Snippet 3", "url": "https://example.com/3"},
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
         result = tool_registry.execute("web_search", query="test query")
         assert result["success"] is True
         assert result["query"] == "test query"
         assert len(result["results"]) == 3
+        assert result["results"][0]["title"] == "Result 1"
+        assert result["results"][0]["snippet"] == "Snippet 1"
 
-    def test_web_search_custom_num_results(self, tool_registry):
+    @patch("src.tools.base.httpx.Client")
+    def test_web_search_custom_num_results(self, mock_client_cls, tool_registry):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"title": f"R{i}", "content": f"S{i}", "url": f"https://example.com/{i}"}
+                for i in range(5)
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
         result = tool_registry.execute("web_search", query="test", num_results=5)
+        assert result["success"] is True
         assert len(result["results"]) == 5
+
+    @patch("src.tools.base.httpx.Client")
+    def test_web_search_timeout(self, mock_client_cls, tool_registry):
+        mock_client = MagicMock()
+        mock_client.post.side_effect = httpx.TimeoutException("timeout")
+        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        result = tool_registry.execute("web_search", query="test")
+        assert result["success"] is False
+        assert "timed out" in result["error"]
+
+    @patch("src.tools.base.httpx.Client")
+    def test_web_search_connection_error(self, mock_client_cls, tool_registry):
+        mock_client = MagicMock()
+        mock_client.post.side_effect = httpx.ConnectError("refused")
+        mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        result = tool_registry.execute("web_search", query="test")
+        assert result["success"] is False
+        assert "Cannot connect" in result["error"]
 
     def test_unknown_tool_returns_error(self, tool_registry):
         result = tool_registry.execute("nonexistent_tool")

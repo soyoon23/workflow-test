@@ -58,10 +58,7 @@ class PlanNode(NodeMixin):
         logger.info("plan_node: generated %d steps", len(plan))
 
         c.callback.plan_ready(
-            plan=[
-                {"step_number": s["step_number"], "description": s["description"]}
-                for s in plan
-            ],
+            plan=[{"step_number": s["step_number"], "description": s["description"]} for s in plan],
             skill=selected_skill,
         )
         c.callback.phase_end("plan", step_count=len(plan))
@@ -73,11 +70,7 @@ class PlanNode(NodeMixin):
             "iteration_count": state.get("iteration_count", 0) + 1,
         }
 
-        if (
-            selected_skill
-            and state.get("auto_select_skill")
-            and not state.get("active_skill_name")
-        ):
+        if selected_skill and state.get("auto_select_skill") and not state.get("active_skill_name"):
             result["active_skill_name"] = selected_skill
             logger.info("plan_node: auto-selected skill=%s", selected_skill)
 
@@ -95,9 +88,7 @@ class PlanNode(NodeMixin):
                 "in_progress": "[>>]",
             }.get(step["status"], "[?]")
 
-            lines.append(
-                f"{status_emoji} Step {step['step_number']}: {step['description']}"
-            )
+            lines.append(f"{status_emoji} Step {step['step_number']}: {step['description']}")
             if step.get("result"):
                 lines.append(f"   Result: {step['result'][:200]}")
 

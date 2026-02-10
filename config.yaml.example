@@ -17,6 +17,12 @@ conversation:
   max_history_turns: 20
   include_plan_detail_turns: 1
 
+search:
+  tool_name: "tavily-search"        # must match LiteLLM proxy search_tools config
+  default_depth: "basic"            # "basic" or "advanced"
+  max_results: 5                    # default max results
+  timeout: 10                       # HTTP timeout in seconds
+
 eval:
   base_url: "http://localhost:4000"
   model: "openai/gpt-4"

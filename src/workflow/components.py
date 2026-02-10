@@ -25,6 +25,4 @@ class WorkflowComponents:
     skills: SkillRegistry
     initial_skill: Optional[Skill] = None
     callback: StreamCallback = field(default_factory=StreamCallback)
-    context_builder: ConversationContextBuilder = field(
-        default_factory=ConversationContextBuilder
-    )
+    context_builder: ConversationContextBuilder = field(default_factory=ConversationContextBuilder)

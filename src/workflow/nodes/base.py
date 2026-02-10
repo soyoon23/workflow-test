@@ -97,9 +97,7 @@ class NodeMixin:
         if not available:
             return ""
 
-        skills_desc = "\n".join(
-            [f"- {s.name} ({s.trigger}): {s.description}" for s in available]
-        )
+        skills_desc = "\n".join([f"- {s.name} ({s.trigger}): {s.description}" for s in available])
 
         return (
             "## Skill Selection\n"
@@ -144,8 +142,7 @@ class NodeMixin:
                         "skill_name": {
                             "type": "string",
                             "description": (
-                                "Name of the skill to activate. "
-                                f"Options: {', '.join(skill_names)}"
+                                f"Name of the skill to activate. Options: {', '.join(skill_names)}"
                             ),
                             "enum": skill_names,
                         },

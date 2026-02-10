@@ -94,7 +94,7 @@ class SkillRegistry:
 
         for skill in self._skills.values():
             if stripped.startswith(skill.trigger):
-                remaining = stripped[len(skill.trigger):].strip()
+                remaining = stripped[len(skill.trigger) :].strip()
                 return skill, remaining
 
         return None, user_input

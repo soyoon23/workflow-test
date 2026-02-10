@@ -160,13 +160,9 @@ def run_workflow_for_eval(
             temperature=llm_cfg.get("temperature", 0.7),
             max_tokens=llm_cfg.get("max_tokens", 4096),
         ),
-        prompts=PromptRegistry(
-            templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")
-        ),
+        prompts=PromptRegistry(templates_dir=str(PROJECT_ROOT / "src" / "prompts" / "templates")),
         tools=ToolRegistry(),
-        skills=SkillRegistry(
-            templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")
-        ),
+        skills=SkillRegistry(templates_dir=str(PROJECT_ROOT / "src" / "skills" / "templates")),
     )
 
     # Detect skill trigger
